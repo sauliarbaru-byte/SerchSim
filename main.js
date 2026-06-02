@@ -463,7 +463,7 @@ function selectAlgo(el, algo) {
 function startSimulation() {
   if (!startPos || !goalPos) { consoleLog('error', 'Start/Goal belum ditentukan!'); return; }
   if (isRunning && !isPaused) return;
-  if (isPaused) { isPaused = false; document.getElementById('infoStatus').textContent = 'Berjalan'; document.getElementById('infoStatus').style.color = 'var(--accent4)'; runNextStep(); return; }
+  if (isPaused) { isPaused = false; document.getElementById('infoStatus').textContent = 'Berjalan'; document.getElementById('infoStatus').style.color = 'var(--accent4)'; updateUIControls(); runNextStep(); return; }
 
   // Reset visited cells
   for (let r = 0; r < gridRows; r++)
@@ -483,6 +483,7 @@ function startSimulation() {
 
   // Init algorithm-specific structures
   initAlgorithm();
+  updateUIControls();
   runNextStep();
 }
 
@@ -707,6 +708,7 @@ function foundGoal(parent, key, gr, gc) {
   consoleLog('path', `Path: ${path.join(' → ')}`);
   isRunning = false;
   if (currentView === 'graph') { initGraphView(); }
+  updateUIControls();
   return true;
 }
 
@@ -716,6 +718,7 @@ function noPath() {
   document.getElementById('statPath').textContent = '∞';
   consoleLog('error', `✗ Tidak ada jalur ditemukan setelah ${stepCount} langkah`);
   isRunning = false;
+  updateUIControls();
   return true;
 }
 
@@ -1129,6 +1132,7 @@ function pauseSimulation() {
     consoleLog('info', 'Simulasi dilanjutkan');
     runNextStep();
   }
+  updateUIControls();
 }
 
 function stepThroughSimulation() {
@@ -1157,6 +1161,7 @@ function stepThroughSimulation() {
     document.getElementById('infoStatus').style.color = 'var(--accent3)';
   }
   
+  updateUIControls();
   stepAlgorithm();
 }
 
@@ -1167,6 +1172,7 @@ function stopSimulation() {
   document.getElementById('infoStatus').textContent = 'Berhenti';
   document.getElementById('infoStatus').style.color = 'var(--accent5)';
   if (stepCount > 0) consoleLog('warn', `Simulasi dihentikan di langkah ${stepCount}`);
+  updateUIControls();
 }
 
 function resetAll() {
@@ -1191,6 +1197,66 @@ function resetStats() {
   document.getElementById('pathDisplay').innerHTML = '<span style="color:var(--text3);font-size:10px">Belum ada jalur</span>';
   document.getElementById('infoStatus').textContent = 'Siap';
   document.getElementById('infoStatus').style.color = 'var(--text3)';
+}
+
+function updateUIControls() {
+  const startBtn = document.getElementById('btnStart');
+  const stepBtn = document.getElementById('btnStep');
+  const pauseBtn = document.getElementById('btnPause');
+  const stopBtn = document.getElementById('btnStop');
+  
+  const heuristicSel = document.getElementById('heuristicSel');
+  const weightSel = document.getElementById('weightSel');
+  const beamWidthSel = document.getElementById('beamWidthSel');
+  const depthLimitSel = document.getElementById('depthLimitSel');
+  
+  const algoItems = document.querySelectorAll('.sidebar .algo-item');
+  const gridSizeBtns = document.querySelectorAll('.grid-size-btn');
+  const toolBtns = document.querySelectorAll('.canvas-toolbar button');
+
+  if (!isRunning) {
+    if (startBtn) startBtn.disabled = false;
+    if (stepBtn) stepBtn.disabled = false;
+    if (pauseBtn) pauseBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = true;
+    
+    if (heuristicSel) heuristicSel.disabled = false;
+    if (weightSel) weightSel.disabled = false;
+    if (beamWidthSel) beamWidthSel.disabled = false;
+    if (depthLimitSel) depthLimitSel.disabled = false;
+    
+    algoItems.forEach(el => el.classList.remove('disabled'));
+    gridSizeBtns.forEach(el => el.disabled = false);
+    toolBtns.forEach(el => el.disabled = false);
+  } else if (isPaused) {
+    if (startBtn) startBtn.disabled = true;
+    if (stepBtn) stepBtn.disabled = false;
+    if (pauseBtn) pauseBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = false;
+    
+    if (heuristicSel) heuristicSel.disabled = true;
+    if (weightSel) weightSel.disabled = true;
+    if (beamWidthSel) beamWidthSel.disabled = true;
+    if (depthLimitSel) depthLimitSel.disabled = true;
+    
+    algoItems.forEach(el => el.classList.add('disabled'));
+    gridSizeBtns.forEach(el => el.disabled = true);
+    toolBtns.forEach(el => el.disabled = true);
+  } else {
+    if (startBtn) startBtn.disabled = true;
+    if (stepBtn) stepBtn.disabled = true;
+    if (pauseBtn) pauseBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = false;
+    
+    if (heuristicSel) heuristicSel.disabled = true;
+    if (weightSel) weightSel.disabled = true;
+    if (beamWidthSel) beamWidthSel.disabled = true;
+    if (depthLimitSel) depthLimitSel.disabled = true;
+    
+    algoItems.forEach(el => el.classList.add('disabled'));
+    gridSizeBtns.forEach(el => el.disabled = true);
+    toolBtns.forEach(el => el.disabled = true);
+  }
 }
 
 function updateSpeed(v) {
@@ -1332,6 +1398,9 @@ window.addEventListener('load', () => {
       }
     }, { passive: false });
   }
+
+  // Initial state UI controls
+  updateUIControls();
 
   // Handle window resize for 3D
   window.addEventListener('resize', () => { if (currentView === '3d') init3D(); if (currentView === 'graph') initGraphView(); });
