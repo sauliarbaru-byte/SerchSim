@@ -443,6 +443,15 @@ function drawGraph() {
 
 // ===================== ALGO SELECT =====================
 function selectAlgo(el, algo) {
+  // In compare mode: just update sidebar highlight, don't change simulation algo
+  if (compareMode) {
+    document.querySelectorAll('.algo-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    const info = ALGO_INFO[algo];
+    document.getElementById('algoTitle').textContent = info.title;
+    document.getElementById('algoDesc').textContent  = info.desc;
+    return;
+  }
   if (isRunning) return;
   currentAlgo = algo;
   document.querySelectorAll('.algo-item').forEach(e => e.classList.remove('active'));
@@ -1203,59 +1212,50 @@ function resetStats() {
 
 function updateUIControls() {
   const startBtn = document.getElementById('btnStart');
-  const stepBtn = document.getElementById('btnStep');
+  const stepBtn  = document.getElementById('btnStep');
   const pauseBtn = document.getElementById('btnPause');
-  const stopBtn = document.getElementById('btnStop');
-
-  const heuristicSel = document.getElementById('heuristicSel');
-  const weightSel = document.getElementById('weightSel');
-  const beamWidthSel = document.getElementById('beamWidthSel');
+  const stopBtn  = document.getElementById('btnStop');
+  const heuristicSel  = document.getElementById('heuristicSel');
+  const weightSel     = document.getElementById('weightSel');
+  const beamWidthSel  = document.getElementById('beamWidthSel');
   const depthLimitSel = document.getElementById('depthLimitSel');
-
-  const algoItems = document.querySelectorAll('.sidebar .algo-item');
-  const gridSizeBtns = document.querySelectorAll('.grid-size-btn');
-  const toolBtns = document.querySelectorAll('.canvas-toolbar button');
+  // Only target normal-mode grid size buttons (not compare ones)
+  const gridSizeBtns = document.querySelectorAll('#rightNormal .grid-size-btn');
+  const toolBtns     = document.querySelectorAll('#canvasWrapNormal .canvas-toolbar button');
+  // Algo items in sidebar: NEVER disabled regardless of simulation state
+  // (user can still browse algo info; selectAlgo guards against running state internally)
 
   if (!isRunning) {
     if (startBtn) startBtn.disabled = false;
-    if (stepBtn) stepBtn.disabled = false;
+    if (stepBtn)  stepBtn.disabled  = false;
     if (pauseBtn) pauseBtn.disabled = true;
-    if (stopBtn) stopBtn.disabled = true;
-
-    if (heuristicSel) heuristicSel.disabled = false;
-    if (weightSel) weightSel.disabled = false;
-    if (beamWidthSel) beamWidthSel.disabled = false;
+    if (stopBtn)  stopBtn.disabled  = true;
+    if (heuristicSel)  heuristicSel.disabled  = false;
+    if (weightSel)     weightSel.disabled     = false;
+    if (beamWidthSel)  beamWidthSel.disabled  = false;
     if (depthLimitSel) depthLimitSel.disabled = false;
-
-    algoItems.forEach(el => el.classList.remove('disabled'));
     gridSizeBtns.forEach(el => el.disabled = false);
     toolBtns.forEach(el => el.disabled = false);
   } else if (isPaused) {
     if (startBtn) startBtn.disabled = true;
-    if (stepBtn) stepBtn.disabled = false;
+    if (stepBtn)  stepBtn.disabled  = false;
     if (pauseBtn) pauseBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = false;
-
-    if (heuristicSel) heuristicSel.disabled = true;
-    if (weightSel) weightSel.disabled = true;
-    if (beamWidthSel) beamWidthSel.disabled = true;
+    if (stopBtn)  stopBtn.disabled  = false;
+    if (heuristicSel)  heuristicSel.disabled  = true;
+    if (weightSel)     weightSel.disabled     = true;
+    if (beamWidthSel)  beamWidthSel.disabled  = true;
     if (depthLimitSel) depthLimitSel.disabled = true;
-
-    algoItems.forEach(el => el.classList.add('disabled'));
     gridSizeBtns.forEach(el => el.disabled = true);
     toolBtns.forEach(el => el.disabled = true);
   } else {
     if (startBtn) startBtn.disabled = true;
-    if (stepBtn) stepBtn.disabled = true;
+    if (stepBtn)  stepBtn.disabled  = true;
     if (pauseBtn) pauseBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = false;
-
-    if (heuristicSel) heuristicSel.disabled = true;
-    if (weightSel) weightSel.disabled = true;
-    if (beamWidthSel) beamWidthSel.disabled = true;
+    if (stopBtn)  stopBtn.disabled  = false;
+    if (heuristicSel)  heuristicSel.disabled  = true;
+    if (weightSel)     weightSel.disabled     = true;
+    if (beamWidthSel)  beamWidthSel.disabled  = true;
     if (depthLimitSel) depthLimitSel.disabled = true;
-
-    algoItems.forEach(el => el.classList.add('disabled'));
     gridSizeBtns.forEach(el => el.disabled = true);
     toolBtns.forEach(el => el.disabled = true);
   }
@@ -1310,7 +1310,7 @@ function toggleConsole() {
   const area = document.querySelector('.console-area');
   const btn = document.getElementById('consoleToggle');
   consoleVisible = !consoleVisible;
-  area.style.height = consoleVisible ? '180px' : '32px';
+  area.style.height = consoleVisible ? '160px' : '32px';
   area.querySelector('.console-body').style.display = consoleVisible ? '' : 'none';
   area.querySelector('.console-input-row').style.display = consoleVisible ? '' : 'none';
   btn.textContent = consoleVisible ? '▼ Tutup' : '▲ Buka';
@@ -1406,4 +1406,684 @@ window.addEventListener('load', () => {
 
   // Handle window resize for 3D
   window.addEventListener('resize', () => { if (currentView === '3d') init3D(); if (currentView === 'graph') initGraphView(); });
+});
+// ===================== COMPARE MODE =====================
+let compareMode = false;
+let cmpGrid = [];
+let cmpStartPos = null, cmpGoalPos = null;
+let cmpRows = 15, cmpCols = 20;
+let cmpTool = 'wall';
+let cmpMouseDown = false;
+
+let cmpState = {
+  A: { algo: 'bfs',   algoState: {}, running: false, done: false, found: false, steps: 0, visited: 0, pathLen: 0, queueLen: 0, startTime: 0, elapsed: 0, timer: null, grid: [], prevGrid: [] },
+  B: { algo: 'astar', algoState: {}, running: false, done: false, found: false, steps: 0, visited: 0, pathLen: 0, queueLen: 0, startTime: 0, elapsed: 0, timer: null, grid: [], prevGrid: [] }
+};
+let cmpIsPaused = false;
+let cmpFinishedCount = 0;
+let _cmpRafPending = false; // requestAnimationFrame guard
+
+// ----- Toggle -----
+function toggleCompareMode() {
+  compareMode = !compareMode;
+  const btn             = document.getElementById('btnCompareToggle');
+  const compareDualWrap = document.getElementById('compareDualWrap');
+  const canvasNormal    = document.getElementById('canvasWrapNormal');
+  const rightNormal     = document.getElementById('rightNormal');
+  const rightCompare    = document.getElementById('rightCompare');
+  const statsRow        = document.getElementById('statsRowNormal');
+  const viewToggle      = document.getElementById('viewToggleNormal');
+
+  if (compareMode) {
+    btn.classList.add('active');
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="9" height="18" rx="1"/><rect x="13" y="3" width="9" height="18" rx="1"/></svg> Mode Biasa`;
+    compareDualWrap.style.display = 'flex';
+    canvasNormal.style.display    = 'none';
+    rightNormal.style.display     = 'none';
+    rightCompare.style.display    = 'flex';
+    if (statsRow)   statsRow.style.display  = 'none';
+    if (viewToggle) viewToggle.style.display = 'none';
+    stopSimulation();
+    populateCompareDropdowns();
+    initCompareGrid();
+    consoleLog('system', '=== Mode Komparasi Aktif ===');
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="9" height="18" rx="1"/><rect x="13" y="3" width="9" height="18" rx="1"/></svg> Bandingkan`;
+    compareDualWrap.style.display = 'none';
+    canvasNormal.style.display    = '';
+    rightNormal.style.display     = 'flex';
+    rightCompare.style.display    = 'none';
+    if (statsRow)   statsRow.style.display  = '';
+    if (viewToggle) viewToggle.style.display = '';
+    stopCompare();
+    consoleLog('system', '=== Mode Biasa Aktif ===');
+  }
+}
+
+// ----- Dropdowns -----
+function populateCompareDropdowns() {
+  const selA = document.getElementById('compareAlgoA');
+  const selB = document.getElementById('compareAlgoB');
+  const algos = Object.keys(ALGO_INFO);
+  const makeOpts = (sel, defaultVal) => {
+    sel.innerHTML = '';
+    algos.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = ALGO_INFO[k].title;
+      if (k === defaultVal) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  };
+  makeOpts(selA, cmpState.A.algo || 'bfs');
+  makeOpts(selB, cmpState.B.algo || 'astar');
+  onCompareAlgoChange();
+}
+
+function onCompareAlgoChange() {
+  const algoA = document.getElementById('compareAlgoA')?.value || 'bfs';
+  const algoB = document.getElementById('compareAlgoB')?.value || 'astar';
+  cmpState.A.algo = algoA;
+  cmpState.B.algo = algoB;
+  document.getElementById('compareGridTitleA').textContent = ALGO_INFO[algoA]?.title || algoA;
+  document.getElementById('compareGridTitleB').textContent = ALGO_INFO[algoB]?.title || algoB;
+  document.getElementById('scoreAlgoNameA').textContent    = ALGO_INFO[algoA]?.title || algoA;
+  document.getElementById('scoreAlgoNameB').textContent    = ALGO_INFO[algoB]?.title || algoB;
+}
+
+// ----- Grid init / render -----
+function initCompareGrid() {
+  cmpRows = gridRows; cmpCols = gridCols;
+  cmpGrid = Array.from({ length: cmpRows }, (_, r) =>
+    Array.from({ length: cmpCols }, (_, c) => {
+      const v = grid[r][c];
+      return ['visited','current','queued','path'].includes(v) ? 'unvisited' : v;
+    })
+  );
+  cmpStartPos = startPos ? { ...startPos } : { r: Math.floor(cmpRows/2), c: 2 };
+  cmpGoalPos  = goalPos  ? { ...goalPos  } : { r: Math.floor(cmpRows/2), c: cmpCols - 3 };
+  renderCompareGrids();
+}
+
+function renderCompareGrids() {
+  _buildCmpGrid('A', 'gridContainerA');
+  _buildCmpGrid('B', 'gridContainerB');
+}
+
+function _buildCmpGrid(side, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const cellSize = _getCmpCellSize();
+  container.style.gridTemplateColumns = `repeat(${cmpCols}, ${cellSize}px)`;
+  container.innerHTML = '';
+  const srcGrid = (cmpState[side].running && cmpState[side].grid.length) ? cmpState[side].grid : cmpGrid;
+  const frag = document.createDocumentFragment();
+  for (let r = 0; r < cmpRows; r++) {
+    for (let c = 0; c < cmpCols; c++) {
+      const st = srcGrid[r][c];
+      const cell = document.createElement('div');
+      cell.className = `cell ${st}`;
+      cell.style.cssText = `width:${cellSize}px;height:${cellSize}px`;
+      if (st === 'start') cell.innerHTML = `<span style="font-size:9px">S</span>`;
+      else if (st === 'goal')  cell.innerHTML = `<span style="font-size:9px">G</span>`;
+      if (!cmpState.A.running && !cmpState.B.running) {
+        cell.addEventListener('mousedown', () => { cmpMouseDown = true; paintCmpCell(r, c); });
+        cell.addEventListener('mouseenter', () => { if (cmpMouseDown) paintCmpCell(r, c); });
+        cell.addEventListener('mouseup',    () => { cmpMouseDown = false; });
+      }
+      frag.appendChild(cell);
+    }
+  }
+  container.appendChild(frag);
+  // init prevGrid snapshot
+  cmpState[side].prevGrid = srcGrid.map(row => [...row]);
+}
+
+function _getCmpCellSize() {
+  const wrap = document.getElementById('compareGridInnerA');
+  if (!wrap) return 18;
+  const w = wrap.clientWidth  - 16;
+  const h = wrap.clientHeight - 16;
+  return Math.max(10, Math.min(24, Math.floor(Math.min(w / cmpCols, h / cmpRows))));
+}
+
+// Only repaint cells whose state actually changed (dirty tracking)
+function _patchCmpGrid(side) {
+  const containerId = side === 'A' ? 'gridContainerA' : 'gridContainerB';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const cur  = cmpState[side].grid;
+  const prev = cmpState[side].prevGrid;
+  const ch   = container.children;
+  for (let r = 0; r < cmpRows; r++) {
+    for (let c = 0; c < cmpCols; c++) {
+      const idx = r * cmpCols + c;
+      const newSt = cur[r][c];
+      if (newSt === prev[r][c]) continue; // skip unchanged
+      const cell = ch[idx];
+      if (!cell) continue;
+      cell.className = `cell ${newSt}`;
+      cell.innerHTML = '';
+      if (newSt === 'start') cell.innerHTML = `<span style="font-size:9px">S</span>`;
+      else if (newSt === 'goal') cell.innerHTML = `<span style="font-size:9px">G</span>`;
+      prev[r][c] = newSt;
+    }
+  }
+}
+
+function paintCmpCell(r, c) {
+  if (cmpState.A.running || cmpState.B.running) return;
+  const current = cmpGrid[r][c];
+  if (cmpTool === 'wall') {
+    if (current === 'start' || current === 'goal') return;
+    cmpGrid[r][c] = current === 'wall' ? 'unvisited' : 'wall';
+  } else if (cmpTool === 'start') {
+    if (current === 'goal') return;
+    if (cmpStartPos) cmpGrid[cmpStartPos.r][cmpStartPos.c] = 'unvisited';
+    cmpStartPos = { r, c };
+    cmpGrid[r][c] = 'start';
+  } else if (cmpTool === 'goal') {
+    if (current === 'start') return;
+    if (cmpGoalPos) cmpGrid[cmpGoalPos.r][cmpGoalPos.c] = 'unvisited';
+    cmpGoalPos = { r, c };
+    cmpGrid[r][c] = 'goal';
+  }
+  // patch both grids from cmpGrid
+  ['A','B'].forEach(side => {
+    const container = document.getElementById(side === 'A' ? 'gridContainerA' : 'gridContainerB');
+    if (!container) return;
+    const idx = r * cmpCols + c;
+    const cell = container.children[idx];
+    if (!cell) return;
+    cell.className = `cell ${cmpGrid[r][c]}`;
+    cell.innerHTML = '';
+    if (cmpGrid[r][c] === 'start') cell.innerHTML = `<span style="font-size:9px">S</span>`;
+    else if (cmpGrid[r][c] === 'goal') cell.innerHTML = `<span style="font-size:9px">G</span>`;
+  });
+}
+
+function setCmpTool(tool, btn) {
+  cmpTool = tool;
+  document.querySelectorAll('#compareToolbar .tool-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function generateCompareMaze() {
+  if (cmpState.A.running || cmpState.B.running) return;
+  cmpGrid = Array.from({ length: cmpRows }, () => Array(cmpCols).fill('unvisited'));
+  for (let r = 0; r < cmpRows; r++)
+    for (let c = 0; c < cmpCols; c++)
+      if (cmpGrid[r][c] !== 'start' && cmpGrid[r][c] !== 'goal')
+        cmpGrid[r][c] = Math.random() < 0.28 ? 'wall' : 'unvisited';
+  if (!cmpStartPos) cmpStartPos = { r: Math.floor(cmpRows/2), c: 2 };
+  if (!cmpGoalPos)  cmpGoalPos  = { r: Math.floor(cmpRows/2), c: cmpCols - 3 };
+  cmpGrid[cmpStartPos.r][cmpStartPos.c] = 'start';
+  cmpGrid[cmpGoalPos.r][cmpGoalPos.c]   = 'goal';
+  const clearAround = pos => {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const nr = pos.r + dr, nc = pos.c + dc;
+      if (nr >= 0 && nr < cmpRows && nc >= 0 && nc < cmpCols && cmpGrid[nr][nc] === 'wall')
+        cmpGrid[nr][nc] = 'unvisited';
+    }
+  };
+  clearAround(cmpStartPos); clearAround(cmpGoalPos);
+  renderCompareGrids();
+  consoleLog('system', 'Maze komparasi dibuat');
+}
+
+function clearCompareGrid() {
+  if (cmpState.A.running || cmpState.B.running) return;
+  cmpGrid = Array.from({ length: cmpRows }, () => Array(cmpCols).fill('unvisited'));
+  if (cmpStartPos) cmpGrid[cmpStartPos.r][cmpStartPos.c] = 'start';
+  if (cmpGoalPos)  cmpGrid[cmpGoalPos.r][cmpGoalPos.c]   = 'goal';
+  resetCompareStats();
+  renderCompareGrids();
+  consoleLog('system', 'Grid komparasi dibersihkan');
+}
+
+// ----- Stats -----
+function resetCompareStats() {
+  ['A','B'].forEach(s => {
+    cmpState[s].steps = 0; cmpState[s].visited = 0; cmpState[s].pathLen = 0;
+    cmpState[s].queueLen = 0; cmpState[s].elapsed = 0;
+    cmpState[s].done = false; cmpState[s].found = false;
+  });
+  ['Steps','Visited','Queue','Path','Time','Eff'].forEach(m => {
+    const elA = document.getElementById(`score${m}A`);
+    const elB = document.getElementById(`score${m}B`);
+    if (elA) elA.textContent = (m === 'Path' || m === 'Eff') ? '-' : '0';
+    if (elB) elB.textContent = (m === 'Path' || m === 'Eff') ? '-' : '0';
+  });
+  document.getElementById('progressBarA').style.width = '0%';
+  document.getElementById('progressBarB').style.width = '0%';
+  document.getElementById('scoreboardWinner').textContent = '';
+  document.getElementById('compareBadgeA').innerHTML = '';
+  document.getElementById('compareBadgeB').innerHTML = '';
+  updateCmpStatus('A', 'ready');
+  updateCmpStatus('B', 'ready');
+  document.getElementById('gridSplitA').classList.remove('winner');
+  document.getElementById('gridSplitB').classList.remove('winner');
+  document.querySelectorAll('.scoreboard-val').forEach(el => el.classList.remove('winner-highlight'));
+}
+
+function updateCmpStatus(side, status) {
+  const el = document.getElementById(`scoreStatus${side}`);
+  if (!el) return;
+  const map = {
+    ready:   ['Siap',       'sbadge-ready'],
+    running: ['Berjalan',   'sbadge-running'],
+    paused:  ['Dijeda',     'sbadge-paused'],
+    found:   ['Selesai ✓',  'sbadge-found'],
+    failed:  ['Gagal ✗',    'sbadge-failed'],
+    winner:  ['🏆 Juara!',  'sbadge-winner'],
+  };
+  const [text, cls] = map[status] || map.ready;
+  el.innerHTML = `<span class="sbadge ${cls}">${text}</span>`;
+}
+
+// ----- Start / Run loop -----
+function startCompare() {
+  if (!cmpStartPos || !cmpGoalPos) { consoleLog('error', 'Start/Goal belum ada di grid komparasi!'); return; }
+  onCompareAlgoChange();
+  cmpFinishedCount = 0;
+  cmpIsPaused = false;
+  _cmpRafPending = false;
+  resetCompareStats();
+
+  cmpState.A.grid = cmpGrid.map(row => [...row]);
+  cmpState.B.grid = cmpGrid.map(row => [...row]);
+
+  ['A','B'].forEach(side => {
+    const s = cmpState[side];
+    s.running = true; s.done = false; s.found = false;
+    s.steps = 0; s.visited = 0; s.pathLen = 0; s.queueLen = 0; s.elapsed = 0;
+    s.startTime = performance.now();
+    s.algoState = _initCmpAlgo(s.algo, cmpStartPos, cmpGoalPos);
+    updateCmpStatus(side, 'running');
+  });
+
+  // Full initial render (builds DOM + prevGrid snapshot)
+  _buildCmpGrid('A', 'gridContainerA');
+  _buildCmpGrid('B', 'gridContainerB');
+
+  document.getElementById('btnCompareStart').disabled = true;
+  document.getElementById('btnComparePause').disabled = false;
+  document.getElementById('btnCompareStop').disabled  = false;
+  document.getElementById('compareAlgoA').disabled = true;
+  document.getElementById('compareAlgoB').disabled = true;
+  document.querySelectorAll('.cmp-size-btn').forEach(b => b.disabled = true);
+  document.querySelectorAll('#compareToolbar button').forEach(b => b.disabled = true);
+
+  consoleLog('system', `=== Komparasi: ${ALGO_INFO[cmpState.A.algo].title} vs ${ALGO_INFO[cmpState.B.algo].title} ===`);
+  _scheduleCompare();
+}
+
+// Speed map: [steps per tick, delay ms]
+//   Slow speeds → 1 step/tick, large delay (smooth animation)
+//   Fast speeds → many steps/tick, fixed 16ms delay (no freeze)
+const _CMP_SPEED = [
+  [1,  400],  // 1 - Sangat Lambat
+  [1,  150],  // 2 - Lambat
+  [2,   60],  // 3 - Sedang
+  [8,   16],  // 4 - Cepat
+  [32,  16],  // 5 - Sangat Cepat
+];
+
+function _scheduleCompare() {
+  if (cmpIsPaused) return;
+  const v = parseInt(document.getElementById('compareSpeedSlider').value) || 3;
+  const [stepsPerTick, delay] = _CMP_SPEED[v - 1];
+  cmpState.A.timer = setTimeout(() => _tickCompare(stepsPerTick), delay);
+}
+
+function _tickCompare(stepsPerTick) {
+  if (cmpIsPaused) return;
+
+  let anyStillRunning = false;
+
+  ['A','B'].forEach(side => {
+    const s = cmpState[side];
+    if (s.done || !s.running) return;
+    anyStillRunning = true;
+
+    for (let i = 0; i < stepsPerTick; i++) {
+      if (s.done) break;
+      const done = _stepCmp(side);
+      if (done) {
+        s.running = false; s.done = true;
+        s.elapsed = performance.now() - s.startTime;
+        cmpFinishedCount++;
+        if (cmpFinishedCount === 1) _declareLeader();
+        break;
+      }
+    }
+    if (!s.done) s.elapsed = performance.now() - s.startTime;
+  });
+
+  // Render only changed cells (dirty patch) — single RAF to avoid layout thrashing
+  if (!_cmpRafPending) {
+    _cmpRafPending = true;
+    requestAnimationFrame(() => {
+      _patchCmpGrid('A');
+      _patchCmpGrid('B');
+      _updateCmpScoreboard('A');
+      _updateCmpScoreboard('B');
+      _cmpRafPending = false;
+    });
+  }
+
+  if (cmpState.A.done && cmpState.B.done) {
+    _finishCompare();
+    return;
+  }
+  if (anyStillRunning || (!cmpState.A.done || !cmpState.B.done)) {
+    _scheduleCompare();
+  }
+}
+
+// ----- Step engine -----
+function _stepCmp(side) {
+  const s       = cmpState[side];
+  const algo    = s.algo;
+  const gR      = s.grid;          // the side's private grid array
+  const as      = s.algoState;
+  const goalP   = cmpGoalPos;
+  const rows    = cmpRows, cols = cmpCols;
+  s.steps++;
+
+  const key = (r, c) => r * 1000 + c; // integer key — much faster than string concat
+
+  const getN = (r, c) => {
+    const out = [];
+    if (r > 0        && gR[r-1][c] !== 'wall') out.push({r: r-1, c});
+    if (r < rows - 1 && gR[r+1][c] !== 'wall') out.push({r: r+1, c});
+    if (c > 0        && gR[r][c-1] !== 'wall') out.push({r, c: c-1});
+    if (c < cols - 1 && gR[r][c+1] !== 'wall') out.push({r, c: c+1});
+    return out;
+  };
+
+  const mC = (r, c) => { if (gR[r][c] !== 'start' && gR[r][c] !== 'goal') gR[r][c] = 'current'; };
+  const mV = (r, c) => { s.visited++; if (gR[r][c] !== 'start' && gR[r][c] !== 'goal') gR[r][c] = 'visited'; };
+  const mQ = (r, c) => { if (gR[r][c] !== 'start' && gR[r][c] !== 'goal' && gR[r][c] !== 'visited') gR[r][c] = 'queued'; };
+
+  const heur = (r, c) => Math.abs(r - goalP.r) + Math.abs(c - goalP.c);
+
+  const foundGoalFn = (parent, gr, gc) => {
+    const path = [];
+    let cur = key(gr, gc);
+    while (cur !== undefined && cur !== null) {
+      path.unshift(cur);
+      cur = parent.get(cur);
+      if (cur === -1) break; // sentinel for start
+    }
+    path.forEach(k => {
+      const pr = Math.floor(k / 1000), pc = k % 1000;
+      if (gR[pr][pc] !== 'start' && gR[pr][pc] !== 'goal') gR[pr][pc] = 'path';
+    });
+    s.pathLen = path.length;
+    s.found = true;
+    return true;
+  };
+
+  const noPFn = () => { s.found = false; return true; };
+
+  // Use integer-keyed Map instead of string Set for visited — much faster
+  switch (algo) {
+
+    case 'bfs': {
+      if (!as.queue.length) return noPFn();
+      const { r, c } = as.queue.shift();
+      mC(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      mV(r, c);
+      getN(r, c).forEach(n => {
+        const k = key(n.r, n.c);
+        if (!as.vis.has(k)) { as.vis.add(k); as.parent.set(k, key(r, c)); as.queue.push(n); mQ(n.r, n.c); }
+      });
+      s.queueLen = as.queue.length;
+      break;
+    }
+
+    case 'dfs': case 'backtracking': {
+      while (as.stack.length) {
+        const { r, c } = as.stack.pop();
+        const k = key(r, c);
+        if (as.vis.has(k)) continue;
+        as.vis.add(k); mC(r, c); mV(r, c);
+        if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+        getN(r, c).reverse().forEach(n => {
+          const nk = key(n.r, n.c);
+          if (!as.vis.has(nk)) { as.parent.set(nk, key(r, c)); as.stack.push(n); mQ(n.r, n.c); }
+        });
+        s.queueLen = as.stack.length;
+        return false;
+      }
+      return noPFn();
+    }
+
+    case 'ucs': {
+      if (!as.pq.length) return noPFn();
+      as.pq.sort((a, b) => a.cost - b.cost);
+      const { r, c, cost } = as.pq.shift();
+      const k = key(r, c);
+      if (as.vis.has(k)) return false;
+      as.vis.add(k); mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      getN(r, c).forEach(n => {
+        const nk = key(n.r, n.c);
+        const nc = cost + 1;
+        if (!as.costMap.has(nk) || nc < as.costMap.get(nk)) {
+          as.costMap.set(nk, nc); as.parent.set(nk, key(r, c));
+          as.pq.push({ ...n, cost: nc }); mQ(n.r, n.c);
+        }
+      });
+      s.queueLen = as.pq.length;
+      break;
+    }
+
+    // All A*-family: astar, greedy, weighted_astar, garislintang, beam, idastar, jps, mcts, ants, hillclimbing, steepest, tabu, ids, dls, simulated_annealing, genetic, minimax, alphabeta, bidirectional
+    default: {
+      if (!as.pq.length) return noPFn();
+      as.pq.sort((a, b) => a.f - b.f);
+      const cur = as.pq.shift();
+      const { r, c, g: gv = 0 } = cur;
+      const k = key(r, c);
+      if (as.vis.has(k)) return false;
+      as.vis.add(k); mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      getN(r, c).forEach(n => {
+        const nk = key(n.r, n.c);
+        const ng = gv + 1;
+        const existing = as.gScore.get(nk);
+        if (existing === undefined || ng < existing) {
+          as.gScore.set(nk, ng);
+          as.parent.set(nk, key(r, c));
+          as.pq.push({ ...n, g: ng, f: ng + heur(n.r, n.c) });
+          mQ(n.r, n.c);
+        }
+      });
+      s.queueLen = as.pq.length;
+      break;
+    }
+  }
+  return false;
+}
+
+function _initCmpAlgo(algo, s, g) {
+  const key = (r, c) => r * 1000 + c;
+  const as = {
+    vis:     new Set(),
+    parent:  new Map(),   // int key → int parent key (-1 = start sentinel)
+    gScore:  new Map(),
+    costMap: new Map(),
+    queue: [], pq: [], stack: []
+  };
+  as.parent.set(key(s.r, s.c), -1);
+
+  switch (algo) {
+    case 'bfs':
+      as.queue.push({ r: s.r, c: s.c });
+      as.vis.add(key(s.r, s.c));
+      break;
+    case 'dfs': case 'backtracking': case 'ids': case 'dls':
+      as.stack.push({ r: s.r, c: s.c });
+      break;
+    case 'ucs':
+      as.pq.push({ r: s.r, c: s.c, cost: 0 });
+      as.costMap.set(key(s.r, s.c), 0);
+      break;
+    default: // A*-family
+      as.pq.push({ r: s.r, c: s.c, g: 0, f: Math.abs(s.r - g.r) + Math.abs(s.c - g.c) });
+      as.gScore.set(key(s.r, s.c), 0);
+      break;
+  }
+  return as;
+}
+
+// ----- Scoreboard (called inside RAF — safe to write DOM) -----
+function _updateCmpScoreboard(side) {
+  const s = cmpState[side];
+  const get = id => document.getElementById(id);
+  get(`scoreSteps${side}`).textContent   = s.steps;
+  get(`scoreVisited${side}`).textContent = s.visited;
+  get(`scoreQueue${side}`).textContent   = s.queueLen;
+  get(`scorePath${side}`).textContent    = s.pathLen || '-';
+  get(`scoreTime${side}`).textContent    = Math.round(s.elapsed);
+  const eff = (s.visited > 0 && s.pathLen > 0)
+    ? (s.pathLen / s.visited * 100).toFixed(1) + '%' : '-';
+  get(`scoreEff${side}`).textContent = eff;
+  const maxExp = cmpRows * cmpCols * 0.7;
+  get(`progressBar${side}`).style.width = Math.min(100, s.visited / maxExp * 100) + '%';
+}
+
+// ----- Winner logic -----
+function _declareLeader() {
+  const A = cmpState.A, B = cmpState.B;
+  if (A.done && !B.done && A.found) { _markLeader('A'); }
+  else if (B.done && !A.done && B.found) { _markLeader('B'); }
+}
+
+function _markLeader(side) {
+  updateCmpStatus(side, 'winner');
+  const other = side === 'A' ? 'B' : 'A';
+  updateCmpStatus(other, cmpState[other].running ? 'running' : 'found');
+  const algoName = ALGO_INFO[cmpState[side].algo]?.title || cmpState[side].algo;
+  const color    = side === 'A' ? 'var(--accent)' : 'var(--accent2)';
+  document.getElementById('scoreboardWinner').innerHTML =
+    `<span style="color:${color}">▲ ${algoName}</span> 🏆 Pertama Selesai!`;
+  document.getElementById(`compareBadge${side}`).innerHTML =
+    `<span class="sbadge sbadge-winner" style="font-size:9px">🏆 Juara</span>`;
+  document.getElementById('gridSplitA').classList.toggle('winner', side === 'A');
+  document.getElementById('gridSplitB').classList.toggle('winner', side === 'B');
+}
+
+function _finishCompare() {
+  clearTimeout(cmpState.A.timer);
+  cmpState.A.running = cmpState.B.running = false;
+  cmpIsPaused = false;
+
+  const A = cmpState.A, B = cmpState.B;
+
+  // Final status
+  const statusFor = (s, other) => {
+    if (!s.found) return 'failed';
+    if (!other.found || s.pathLen < other.pathLen) return 'winner';
+    if (s.pathLen === other.pathLen) return 'found';
+    return 'found';
+  };
+  updateCmpStatus('A', statusFor(A, B));
+  updateCmpStatus('B', statusFor(B, A));
+
+  // Highlight winning metrics
+  [['Steps','scoreStepsA','scoreStepsB'], ['Visited','scoreVisitedA','scoreVisitedB'],
+   ['Path','scorePathA','scorePathB'],    ['Time','scoreTimeA','scoreTimeB']
+  ].forEach(([, kA, kB]) => {
+    const va = parseFloat(document.getElementById(kA).textContent) || Infinity;
+    const vb = parseFloat(document.getElementById(kB).textContent) || Infinity;
+    if (va < vb) document.getElementById(kA).classList.add('winner-highlight');
+    else if (vb < va) document.getElementById(kB).classList.add('winner-highlight');
+  });
+
+  // Summary
+  let summary = '';
+  if (A.found && B.found) {
+    if      (A.pathLen < B.pathLen) summary = `<span style="color:var(--accent)">▲ ${ALGO_INFO[A.algo]?.title}</span> unggul — path lebih pendek (${A.pathLen} vs ${B.pathLen})`;
+    else if (B.pathLen < A.pathLen) summary = `<span style="color:var(--accent2)">▲ ${ALGO_INFO[B.algo]?.title}</span> unggul — path lebih pendek (${B.pathLen} vs ${A.pathLen})`;
+    else                             summary = `⚖️ Seri! Panjang path sama (${A.pathLen} node)`;
+  } else if (A.found) summary = `<span style="color:var(--accent)">▲ ${ALGO_INFO[A.algo]?.title}</span> menang — B gagal menemukan jalur`;
+  else if (B.found)   summary = `<span style="color:var(--accent2)">▲ ${ALGO_INFO[B.algo]?.title}</span> menang — A gagal menemukan jalur`;
+  else                summary = `❌ Kedua algoritma gagal menemukan jalur`;
+  document.getElementById('scoreboardWinner').innerHTML = summary;
+
+  // Re-enable controls
+  document.getElementById('btnCompareStart').disabled = false;
+  document.getElementById('btnComparePause').disabled = true;
+  document.getElementById('btnCompareStop').disabled  = true;
+  document.getElementById('compareAlgoA').disabled = false;
+  document.getElementById('compareAlgoB').disabled = false;
+  document.querySelectorAll('.cmp-size-btn').forEach(b => b.disabled = false);
+  document.querySelectorAll('#compareToolbar button').forEach(b => b.disabled = false);
+
+  _updateCmpScoreboard('A'); _updateCmpScoreboard('B');
+  consoleLog('success', `Komparasi selesai! ${A.algo}: ${A.steps} steps | ${B.algo}: ${B.steps} steps`);
+}
+
+// ----- Pause / Stop -----
+function pauseCompare() {
+  cmpIsPaused = !cmpIsPaused;
+  const btn = document.getElementById('btnComparePause');
+  if (cmpIsPaused) {
+    clearTimeout(cmpState.A.timer);
+    btn.textContent = '▶ Lanjut';
+    updateCmpStatus('A', cmpState.A.done ? (cmpState.A.found ? 'found' : 'failed') : 'paused');
+    updateCmpStatus('B', cmpState.B.done ? (cmpState.B.found ? 'found' : 'failed') : 'paused');
+    consoleLog('warn', 'Komparasi dijeda');
+  } else {
+    btn.textContent = '⏸ Jeda';
+    if (!cmpState.A.done) updateCmpStatus('A', 'running');
+    if (!cmpState.B.done) updateCmpStatus('B', 'running');
+    consoleLog('info', 'Komparasi dilanjutkan');
+    _scheduleCompare();
+  }
+}
+
+function stopCompare() {
+  clearTimeout(cmpState.A.timer);
+  cmpIsPaused = false;
+  cmpState.A.running = cmpState.B.running = false;
+  document.getElementById('btnCompareStart').disabled = false;
+  document.getElementById('btnComparePause').disabled = true;
+  document.getElementById('btnComparePause').textContent = '⏸ Jeda';
+  document.getElementById('btnCompareStop').disabled  = true;
+  document.getElementById('compareAlgoA').disabled = false;
+  document.getElementById('compareAlgoB').disabled = false;
+  document.querySelectorAll('.cmp-size-btn').forEach(b => b.disabled = false);
+  document.querySelectorAll('#compareToolbar button').forEach(b => b.disabled = false);
+  updateCmpStatus('A', 'ready'); updateCmpStatus('B', 'ready');
+  consoleLog('warn', 'Komparasi dihentikan');
+}
+
+function updateCompareSpeed(v) {
+  const labels = ['Sangat Lambat', 'Lambat', 'Sedang', 'Cepat', 'Sangat Cepat'];
+  document.getElementById('compareSpeedLabel').textContent = labels[v - 1];
+}
+
+function setCmpGridSize(r, c, btn) {
+  if (cmpState.A.running || cmpState.B.running) return;
+  document.querySelectorAll('.cmp-size-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  cmpRows = r; cmpCols = c;
+  cmpGrid = Array.from({ length: r }, () => Array(c).fill('unvisited'));
+  cmpStartPos = { r: Math.floor(r / 2), c: 2 };
+  cmpGoalPos  = { r: Math.floor(r / 2), c: c - 3 };
+  cmpGrid[cmpStartPos.r][cmpStartPos.c] = 'start';
+  cmpGrid[cmpGoalPos.r][cmpGoalPos.c]   = 'goal';
+  resetCompareStats();
+  renderCompareGrids();
+  consoleLog('system', `Grid komparasi: ${r}×${c}`);
+}
+
+window.addEventListener('resize', () => {
+  if (compareMode && cmpGrid.length) renderCompareGrids();
 });
