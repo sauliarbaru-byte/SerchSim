@@ -327,7 +327,7 @@ function render3D(ctx, W, H) {
     }
   });
 
-  animFrame3d = requestAnimationFrame(() => render3D(ctx, W, H));
+  if (currentView === '3d') animFrame3d = requestAnimationFrame(() => render3D(ctx, W, H));
 }
 
 
@@ -518,7 +518,6 @@ function initAlgorithm() {
       break;
     case 'dfs':
       algoState.stack = [{ r: s.r, c: s.c }];
-      algoState.visited.add(key(s.r, s.c));
       break;
     case 'dls':
       algoState.stack = [{ r: s.r, c: s.c, depth: 0 }];
@@ -527,7 +526,8 @@ function initAlgorithm() {
     case 'ids':
       algoState.maxDepth = 0; algoState.currentDepth = 0;
       algoState.stack = [{ r: s.r, c: s.c, depth: 0 }];
-      algoState.iterVisited = new Set([key(s.r, s.c)]);
+      algoState.iterVisited = new Set();
+      algoState.actualPath = [];
       break;
     case 'ucs':
       algoState.pq = [{ r: s.r, c: s.c, cost: 0 }];
@@ -552,8 +552,10 @@ function initAlgorithm() {
       break;
     case 'idastar':
       algoState.threshold = heuristic(s, g);
-      algoState.stack = [{ r: s.r, c: s.c, g: 0, path: [key(s.r, s.c)] }];
+      algoState.stack = [{ r: s.r, c: s.c, g: 0 }];
       algoState.nextThreshold = Infinity;
+      algoState.iterVisited = new Set();
+      algoState.actualPath = [];
       break;
     case 'beam':
       algoState.beam = [{ r: s.r, c: s.c, h: heuristic(s, g) }];
@@ -567,28 +569,47 @@ function initAlgorithm() {
       break;
     case 'simulated_annealing':
       algoState.current = { r: s.r, c: s.c };
-      algoState.temp = 100; algoState.cooling = 0.98;
+      algoState.temp = 200; algoState.cooling = 0.995;
+      algoState.visited.add(key(s.r, s.c));
+      algoState.bestDist = heuristic(s, g);
+      algoState.bestPos = { r: s.r, c: s.c };
+      algoState.actualPath = [key(s.r, s.c)];
       break;
     case 'tabu':
       algoState.current = { r: s.r, c: s.c };
       algoState.tabuList = [key(s.r, s.c)]; algoState.tabuMax = 15;
+      algoState.actualPath = [key(s.r, s.c)];
       break;
     case 'genetic':
-      algoState.population = generatePopulation(s, g, 10);
+      algoState.population = generatePopulation(s, g, 20);
       algoState.generation = 0;
+      algoState.bestEver = null;
       break;
-    case 'minimax': case 'alphabeta': case 'mcts':
-      algoState.queue = [{ r: s.r, c: s.c }];
+    case 'minimax':
+      algoState.current = { r: s.r, c: s.c };
       algoState.visited.add(key(s.r, s.c));
+      algoState.depth = 4;
+      break;
+    case 'alphabeta':
+      algoState.current = { r: s.r, c: s.c };
+      algoState.visited.add(key(s.r, s.c));
+      algoState.depth = 4;
+      algoState.totalPruned = 0;
+      break;
+    case 'mcts':
+      algoState.root = { r: s.r, c: s.c, parentNode: null, children: [], visits: 0, wins: 0 };
+      algoState.iteration = 0;
+      algoState.maxIterations = 300;
       break;
     case 'backtracking':
-      algoState.stack = [{ r: s.r, c: s.c, path: [key(s.r, s.c)] }];
+      algoState.stack = [{ r: s.r, c: s.c }];
+      algoState.visited.add(key(s.r, s.c));
       break;
     case 'ants':
       algoState.pheromone = {};
-      algoState.ants = Array.from({ length: 5 }, () => ({ r: s.r, c: s.c, path: [key(s.r, s.c)], visited: new Set([key(s.r, s.c)]) }));
+      algoState.ants = Array.from({ length: 8 }, () => ({ r: s.r, c: s.c, path: [key(s.r, s.c)], visited: new Set([key(s.r, s.c)]), done: false }));
       algoState.bestPath = null; algoState.iteration = 0;
-      algoState.queue = [{ r: s.r, c: s.c }]; algoState.visited.add(key(s.r, s.c));
+      algoState.totalIterations = 0;
       break;
     case 'jps':
       algoState.pq = [{ r: s.r, c: s.c, g: 0, f: heuristic(s, g) }];
@@ -599,17 +620,21 @@ function initAlgorithm() {
 
 function generatePopulation(s, g, size) {
   const pop = [];
+  const key = (r, c) => `${r},${c}`;
   for (let i = 0; i < size; i++) {
     const path = [{ r: s.r, c: s.c }];
     let cur = { r: s.r, c: s.c };
-    for (let j = 0; j < 30; j++) {
-      const nbrs = getNeighbors(cur.r, cur.c).filter(n => grid[n.r][n.c] !== 'wall');
+    const vis = new Set([key(cur.r, cur.c)]);
+    for (let j = 0; j < 40; j++) {
+      let nbrs = getNeighbors(cur.r, cur.c).filter(n => grid[n.r][n.c] !== 'wall' && !vis.has(key(n.r, n.c)));
       if (!nbrs.length) break;
       const next = nbrs[Math.floor(Math.random() * nbrs.length)];
       path.push(next); cur = next;
+      vis.add(key(next.r, next.c));
       if (cur.r === g.r && cur.c === g.c) break;
     }
-    pop.push({ path, fitness: heuristic(cur, g) });
+    // fitness: path length + penalty for not reaching goal
+    pop.push({ path, fitness: path.length + heuristic(cur, g) * 5 });
   }
   return pop;
 }
@@ -753,7 +778,6 @@ function stepGarisLintang(s, g, key) {
   as.visited.add(k);
   markCurrent(r, c); markVisited(r, c);
 
-  const h = Math.round(heuristic({ r, c }, g) * 10) / 10;
   consoleLog('step', `GarisLintang → (${r},${c}) f=${Math.round(cur.f * 10) / 10}`);
   if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
 
@@ -847,25 +871,45 @@ function stepIDS(s, g, key) {
     as.maxDepth++;
     consoleLog('warn', `IDS → Iterasi baru, max depth: ${as.maxDepth}`);
     as.stack = [{ r: s.r, c: s.c, depth: 0 }];
-    as.iterVisited = new Set([key(s.r, s.c)]);
+    as.iterVisited = new Set();
+    as.actualPath = [];
     for (let r = 0; r < gridRows; r++) for (let c = 0; c < gridCols; c++) if (grid[r][c] === 'visited' || grid[r][c] === 'queued') { grid[r][c] = 'unvisited'; updateCellUI(r, c); }
     if (as.maxDepth > gridRows * gridCols) return noPath();
     return false;
   }
-  const { r, c, depth } = as.stack.pop();
+  
+  const cur = as.stack.pop();
+  if (cur.isBacktrack) {
+    as.iterVisited.delete(key(cur.r, cur.c));
+    as.actualPath.pop();
+    return false;
+  }
+  
+  const { r, c, depth } = cur;
   const k = key(r, c);
+  
   if (as.iterVisited.has(k)) return false;
   as.iterVisited.add(k);
+  as.actualPath = as.actualPath || [];
+  as.actualPath.push(k);
+  as.stack.push({ isBacktrack: true, r, c });
+  
   markCurrent(r, c); markVisited(r, c);
   consoleLog('step', `IDS[d=${depth}] → (${r},${c})`);
-  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  
+  if (r === g.r && c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < as.actualPath.length; i++) parentMap[as.actualPath[i]] = as.actualPath[i-1];
+    return foundGoal(parentMap, key, r, c);
+  }
+  
   if (depth < as.maxDepth) {
     getNeighbors(r, c).reverse().forEach(n => {
       const nk = key(n.r, n.c);
-      if (!as.iterVisited.has(nk)) { as.parent[nk] = key(r, c); as.stack.push({ ...n, depth: depth + 1 }); markQueued(n.r, n.c); }
+      if (!as.iterVisited.has(nk)) { as.stack.push({ ...n, depth: depth + 1 }); markQueued(n.r, n.c); }
     });
   }
-  updateQueueDisplay(as.stack);
+  updateQueueDisplay(as.stack.filter(x => !x.isBacktrack));
   return false;
 }
 
@@ -896,14 +940,26 @@ function stepBiDir(s, g, key) {
   const vis = isForward ? as.visitedF : as.visitedB;
   const visOther = isForward ? as.visitedB : as.visitedF;
   const par = isForward ? as.parentF : as.parentB;
-  if (!q.length) return noPath();
+  if (!q.length) {
+    if ((isForward ? as.queueB : as.queueF).length) { as.direction = isForward ? 'backward' : 'forward'; return false; }
+    return noPath();
+  }
   const { r, c } = q.shift();
   const k = key(r, c);
   markCurrent(r, c); markVisited(r, c);
   consoleLog('step', `Bi-BFS [${isForward ? '→' : '←'}] → (${r},${c})`);
   if (visOther.has(k)) {
     consoleLog('success', `Pertemuan di (${r},${c})!`);
-    return foundGoal(as.parentF, key, r, c);
+    // Merge path: start → meeting via parentF, meeting → goal via parentB
+    const mergedParent = {};
+    let curF = k;
+    while (curF && as.parentF[curF]) { mergedParent[curF] = as.parentF[curF]; curF = as.parentF[curF]; }
+    let curB = k;
+    while (curB && as.parentB[curB]) {
+      mergedParent[as.parentB[curB]] = curB;
+      curB = as.parentB[curB];
+    }
+    return foundGoal(mergedParent, key, g.r, g.c);
   }
   getNeighbors(r, c).forEach(n => {
     const nk = key(n.r, n.c);
@@ -967,21 +1023,42 @@ function stepIDAStar(s, g, key) {
     if (as.nextThreshold === Infinity) return noPath();
     as.threshold = as.nextThreshold;
     as.nextThreshold = Infinity;
-    as.stack = [{ r: s.r, c: s.c, g: 0, path: [key(s.r, s.c)] }];
+    as.stack = [{ r: s.r, c: s.c, g: 0 }];
+    as.iterVisited = new Set();
+    as.actualPath = [];
     consoleLog('warn', `IDA* → threshold = ${Math.round(as.threshold * 10) / 10}`);
     for (let r = 0; r < gridRows; r++) for (let c = 0; c < gridCols; c++) if (grid[r][c] === 'visited' || grid[r][c] === 'queued') { grid[r][c] = 'unvisited'; updateCellUI(r, c); }
     return false;
   }
-  const { r, c, g: gv, path } = as.stack.pop();
+  const cur = as.stack.pop();
+  if (cur.isBacktrack) {
+    as.iterVisited.delete(key(cur.r, cur.c));
+    as.actualPath.pop();
+    return false;
+  }
+  const { r, c, g: gv } = cur;
+  const k = key(r, c);
   const f = gv + heuristic({ r, c }, g);
   if (f > as.threshold) { as.nextThreshold = Math.min(as.nextThreshold, f); return false; }
+  
+  if (as.iterVisited.has(k)) return false;
+  as.iterVisited.add(k);
+  as.actualPath = as.actualPath || [];
+  as.actualPath.push(k);
+  as.stack.push({ isBacktrack: true, r, c });
+
   markCurrent(r, c); markVisited(r, c);
   consoleLog('step', `IDA* → (${r},${c}) g=${gv} f=${Math.round(f * 10) / 10} thresh=${Math.round(as.threshold * 10) / 10}`);
-  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
-  getNeighbors(r, c).forEach(n => {
+  if (r === g.r && c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < as.actualPath.length; i++) parentMap[as.actualPath[i]] = as.actualPath[i-1];
+    return foundGoal(parentMap, key, r, c);
+  }
+  getNeighbors(r, c).reverse().forEach(n => {
     const nk = key(n.r, n.c);
-    if (!path.includes(nk)) { as.parent[nk] = key(r, c); as.stack.push({ ...n, g: gv + 1, path: [...path, nk] }); markQueued(n.r, n.c); }
+    if (!as.iterVisited.has(nk)) { as.stack.push({ ...n, g: gv + 1 }); markQueued(n.r, n.c); }
   });
+  updateQueueDisplay(as.stack.filter(x => !x.isBacktrack));
   return false;
 }
 
@@ -999,6 +1076,7 @@ function stepBeam(s, g, key) {
     const nk = key(n.r, n.c);
     if (!as.visited.has(nk)) { as.parent[nk] = key(r, c); candidates.push({ ...n, h: heuristic(n, g) }); }
   });
+  if (!candidates.length && !as.beam.length) return noPath();
   candidates.sort((a, b) => a.h - b.h);
   candidates = candidates.slice(0, as.beamWidth);
   candidates.forEach(n => { as.visited.add(key(n.r, n.c)); as.beam.push(n); markQueued(n.r, n.c); });
@@ -1040,17 +1118,28 @@ function stepSA(s, g, key) {
   const { r, c } = as.current;
   markCurrent(r, c); markVisited(r, c);
   as.temp *= as.cooling;
-  if (as.temp < 0.01) return noPath();
-  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  if (as.temp < 0.001) return noPath();
+  if (r === g.r && c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < as.actualPath.length; i++) parentMap[as.actualPath[i]] = as.actualPath[i-1];
+    return foundGoal(parentMap, key, r, c);
+  }
   const nbrs = getNeighbors(r, c);
-  if (!nbrs.length) return false;
+  if (!nbrs.length) return noPath();
   const next = nbrs[Math.floor(Math.random() * nbrs.length)];
-  const dE = heuristic({ r, c }, g) - heuristic(next, g);
-  const accept = dE > 0 || Math.random() < Math.exp(dE / as.temp);
+  const curDist = heuristic({ r, c }, g);
+  const nextDist = heuristic(next, g);
+  const dE = curDist - nextDist;
+  const accept = dE > 0 || Math.random() < Math.exp(dE / (as.temp * 0.1));
   if (accept) {
-    as.parent[key(next.r, next.c)] = key(r, c);
+    as.actualPath.push(key(next.r, next.c));
     as.current = next;
     markQueued(next.r, next.c);
+    // Track best position found
+    if (nextDist < as.bestDist) {
+      as.bestDist = nextDist;
+      as.bestPos = { r: next.r, c: next.c };
+    }
   }
   consoleLog('step', `SA T=${as.temp.toFixed(2)} → (${next.r},${next.c}) ΔE=${dE.toFixed(2)} ${accept ? '✓' : '✗'}`);
   return false;
@@ -1060,13 +1149,17 @@ function stepTabu(s, g, key) {
   const as = algoState;
   const { r, c } = as.current;
   markCurrent(r, c); markVisited(r, c);
-  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  if (r === g.r && c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < as.actualPath.length; i++) parentMap[as.actualPath[i]] = as.actualPath[i-1];
+    return foundGoal(parentMap, key, r, c);
+  }
   const nbrs = getNeighbors(r, c).filter(n => !as.tabuList.includes(key(n.r, n.c)));
   if (!nbrs.length) return noPath();
   nbrs.sort((a, b) => heuristic(a, g) - heuristic(b, g));
   const best = nbrs[0];
   const bk = key(best.r, best.c);
-  as.parent[bk] = key(r, c);
+  as.actualPath.push(bk);
   as.tabuList.push(bk);
   if (as.tabuList.length > as.tabuMax) as.tabuList.shift();
   as.current = best;
@@ -1078,52 +1171,469 @@ function stepTabu(s, g, key) {
 function stepGenetic(s, g, key) {
   const as = algoState;
   as.generation++;
-  const best = as.population.reduce((a, b) => a.fitness < b.fitness ? a : b);
-  const last = best.path[best.path.length - 1];
-  markCurrent(last.r, last.c);
-  best.path.forEach(p => markVisited(p.r, p.c));
-  consoleLog('step', `GA Gen ${as.generation} | Best fitness: ${best.fitness.toFixed(2)}`);
-  if (last.r === g.r && last.c === g.c) {
-    best.path.forEach(p => { as.parent[key(p.r, p.c)] = null; });
-    return foundGoal(as.parent, key, last.r, last.c);
+  as.population.sort((a, b) => a.fitness - b.fitness);
+  const best = as.population[0];
+  
+  if (!as.bestEver || best.fitness < as.bestEver.fitness) {
+    as.bestEver = { path: [...best.path], fitness: best.fitness };
   }
-  // Simple evolution: mutate best
-  as.population = as.population.map(ind => {
-    if (Math.random() < 0.3) return generatePopulation(s, g, 1)[0];
-    return ind;
+  
+  const displayBest = as.bestEver;
+  const last = displayBest.path[displayBest.path.length - 1];
+  
+  // Visuals
+  visitedCount = as.generation * 20 * Math.floor(gridRows * gridCols * 0.05); // rough estimate
+  document.getElementById('statVisited').textContent = visitedCount;
+  for (let r=0; r<gridRows; r++) for (let c=0; c<gridCols; c++) if (grid[r][c] === 'visited' || grid[r][c] === 'current' || grid[r][c] === 'queued') { grid[r][c] = 'unvisited'; updateCellUI(r, c); }
+  
+  if (grid[last.r][last.c] !== 'start' && grid[last.r][last.c] !== 'goal') { grid[last.r][last.c] = 'current'; updateCellUI(last.r, last.c); }
+  displayBest.path.forEach(p => {
+    if (grid[p.r][p.c] !== 'start' && grid[p.r][p.c] !== 'goal') { grid[p.r][p.c] = 'visited'; updateCellUI(p.r, p.c); }
   });
-  if (as.generation > 100) return noPath();
+  consoleLog('step', `GA Gen ${as.generation} | Best fitness: ${displayBest.fitness.toFixed(2)}`);
+  
+  if (last.r === g.r && last.c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < displayBest.path.length; i++) {
+      parentMap[key(displayBest.path[i].r, displayBest.path[i].c)] = key(displayBest.path[i-1].r, displayBest.path[i-1].c);
+    }
+    return foundGoal(parentMap, key, last.r, last.c);
+  }
+  
+  if (as.generation >= 200) return noPath();
+  
+  // Crossover & Mutation
+  const newPop = [as.bestEver]; // Elitism
+  while (newPop.length < 20) {
+    const p1 = as.population[Math.floor(Math.random() * 5)]; // Select from top 5
+    const p2 = as.population[Math.floor(Math.random() * 5)];
+    let childPath = [];
+    
+    // One-point crossover if paths have common nodes (other than start)
+    const p2Set = new Set(p2.path.map(p => key(p.r, p.c)));
+    let crossIdx = -1;
+    for (let i = p1.path.length - 1; i > 0; i--) {
+      if (p2Set.has(key(p1.path[i].r, p1.path[i].c))) { crossIdx = i; break; }
+    }
+    
+    if (crossIdx !== -1 && Math.random() < 0.7) { // 70% crossover rate
+      const crossNode = p1.path[crossIdx];
+      const p2Idx = p2.path.findIndex(p => p.r === crossNode.r && p.c === crossNode.c);
+      childPath = [...p1.path.slice(0, crossIdx), ...p2.path.slice(p2Idx)];
+    } else {
+      childPath = [...p1.path];
+    }
+    
+    // Mutation
+    if (Math.random() < 0.3) {
+      const mutIdx = Math.floor(Math.random() * childPath.length);
+      childPath = childPath.slice(0, mutIdx + 1);
+      let cur = childPath[mutIdx];
+      const vis = new Set(childPath.map(p => key(p.r, p.c)));
+      for (let j = 0; j < 15; j++) {
+        let nbrs = getNeighbors(cur.r, cur.c).filter(n => grid[n.r][n.c] !== 'wall' && !vis.has(key(n.r, n.c)));
+        if (!nbrs.length) break;
+        cur = nbrs[Math.floor(Math.random() * nbrs.length)];
+        childPath.push(cur);
+        vis.add(key(cur.r, cur.c));
+        if (cur.r === g.r && cur.c === g.c) break;
+      }
+    }
+    
+    const lastChild = childPath[childPath.length - 1];
+    newPop.push({ path: childPath, fitness: childPath.length + heuristic(lastChild, g) * 5 });
+  }
+  
+  as.population = newPop;
   return false;
 }
 
-function stepMinimax(s, g, key) { return stepBFS(s, g, key); }
-function stepAlphaBeta(s, g, key) { return stepBFS(s, g, key); }
-function stepMCTS(s, g, key) { return stepAStar(s, g, key, false); }
+function stepMinimax(s, g, key) {
+  const as = algoState;
+  const { r, c } = as.current;
+  markCurrent(r, c); markVisited(r, c);
+  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  
+  // Game tree evaluation
+  const evaluate = (nr, nc, depth, isMax, pathVis) => {
+    if (depth === 0 || (nr === g.r && nc === g.c)) {
+      return -heuristic({ r: nr, c: nc }, g);
+    }
+    const nbrs = getNeighbors(nr, nc).filter(n => !as.visited.has(key(n.r, n.c)) && !pathVis.has(key(n.r, n.c)));
+    if (!nbrs.length) return -heuristic({ r: nr, c: nc }, g);
+    
+    if (isMax) {
+      let best = -Infinity;
+      nbrs.forEach(n => { 
+        pathVis.add(key(n.r, n.c));
+        best = Math.max(best, evaluate(n.r, n.c, depth - 1, false, pathVis)); 
+        pathVis.delete(key(n.r, n.c));
+      });
+      return best;
+    } else {
+      let worst = Infinity;
+      nbrs.forEach(n => { 
+        pathVis.add(key(n.r, n.c));
+        worst = Math.min(worst, evaluate(n.r, n.c, depth - 1, true, pathVis)); 
+        pathVis.delete(key(n.r, n.c));
+      });
+      return worst;
+    }
+  };
+
+  const nbrs = getNeighbors(r, c).filter(n => !as.visited.has(key(n.r, n.c)));
+  if (!nbrs.length) return noPath();
+  
+  let bestVal = -Infinity;
+  let bestNext = null;
+  nbrs.forEach(n => {
+    const pVis = new Set([key(n.r, n.c)]);
+    const val = evaluate(n.r, n.c, as.depth - 1, false, pVis);
+    markQueued(n.r, n.c);
+    if (val > bestVal) { bestVal = val; bestNext = n; }
+  });
+  
+  if (!bestNext) return noPath();
+  as.parent[key(bestNext.r, bestNext.c)] = key(r, c);
+  as.current = bestNext;
+  consoleLog('step', `Minimax → (${bestNext.r},${bestNext.c}) eval=${bestVal.toFixed(1)}`);
+  return false;
+}
+
+function stepAlphaBeta(s, g, key) {
+  const as = algoState;
+  const { r, c } = as.current;
+  markCurrent(r, c); markVisited(r, c);
+  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  
+  const evaluateAB = (nr, nc, depth, alpha, beta, isMax, pathVis) => {
+    if (depth === 0 || (nr === g.r && nc === g.c)) {
+      return -heuristic({ r: nr, c: nc }, g);
+    }
+    const nbrs = getNeighbors(nr, nc).filter(n => !as.visited.has(key(n.r, n.c)) && !pathVis.has(key(n.r, n.c)));
+    if (!nbrs.length) return -heuristic({ r: nr, c: nc }, g);
+    
+    if (isMax) {
+      let maxEval = -Infinity;
+      for (let n of nbrs) {
+        pathVis.add(key(n.r, n.c));
+        const ev = evaluateAB(n.r, n.c, depth - 1, alpha, beta, false, pathVis);
+        pathVis.delete(key(n.r, n.c));
+        maxEval = Math.max(maxEval, ev);
+        alpha = Math.max(alpha, ev);
+        if (beta <= alpha) { as.totalPruned++; break; }
+      }
+      return maxEval;
+    } else {
+      let minEval = Infinity;
+      for (let n of nbrs) {
+        pathVis.add(key(n.r, n.c));
+        const ev = evaluateAB(n.r, n.c, depth - 1, alpha, beta, true, pathVis);
+        pathVis.delete(key(n.r, n.c));
+        minEval = Math.min(minEval, ev);
+        beta = Math.min(beta, ev);
+        if (beta <= alpha) { as.totalPruned++; break; }
+      }
+      return minEval;
+    }
+  };
+
+  const nbrs = getNeighbors(r, c).filter(n => !as.visited.has(key(n.r, n.c)));
+  if (!nbrs.length) return noPath();
+  
+  let bestVal = -Infinity;
+  let bestNext = null;
+  nbrs.forEach(n => {
+    const pVis = new Set([key(n.r, n.c)]);
+    const val = evaluateAB(n.r, n.c, as.depth - 1, -Infinity, Infinity, false, pVis);
+    markQueued(n.r, n.c);
+    if (val > bestVal) { bestVal = val; bestNext = n; }
+  });
+  
+  if (!bestNext) return noPath();
+  as.parent[key(bestNext.r, bestNext.c)] = key(r, c);
+  as.current = bestNext;
+  consoleLog('step', `AlphaBeta → (${bestNext.r},${bestNext.c}) eval=${bestVal.toFixed(1)} pruned=${as.totalPruned}`);
+  return false;
+}
+
+function stepMCTS(s, g, key) {
+  const as = algoState;
+  
+  // Selection
+  let node = as.root;
+  while (node.children.length > 0 && node.children.every(c => c.visits > 0)) {
+    let bestUcb = -Infinity;
+    let nextNode = null;
+    for (let c of node.children) {
+      const ucb = (c.wins / c.visits) + 1.41 * Math.sqrt(Math.log(node.visits) / c.visits);
+      if (ucb > bestUcb) { bestUcb = ucb; nextNode = c; }
+    }
+    node = nextNode;
+  }
+  
+  // Expansion
+  if (node.r !== g.r || node.c !== g.c) {
+    if (node.children.length === 0 && node.visits === 0 && (node.r !== s.r || node.c !== s.c)) {
+      // Just expanded, roll out directly
+    } else {
+      if (node.children.length === 0) {
+        let anc = node;
+        const pathSet = new Set();
+        while(anc) { pathSet.add(key(anc.r, anc.c)); anc = anc.parentNode; }
+        
+        const nbrs = getNeighbors(node.r, node.c).filter(n => !pathSet.has(key(n.r, n.c)));
+        node.children = nbrs.map(n => ({ r: n.r, c: n.c, parentNode: node, children: [], visits: 0, wins: 0 }));
+        node.children.forEach(c => markQueued(c.r, c.c)); // Visuals
+      }
+      if (node.children.length > 0) {
+        const unvisited = node.children.filter(c => c.visits === 0);
+        if (unvisited.length > 0) node = unvisited[Math.floor(Math.random() * unvisited.length)];
+      }
+    }
+  }
+  
+  // Simulation
+  let simNode = { r: node.r, c: node.c };
+  let win = 0;
+  let steps = 0;
+  const simVis = new Set([key(simNode.r, simNode.c)]);
+  while (steps < 40) { // Limit depth
+    if (simNode.r === g.r && simNode.c === g.c) { win = 1; break; }
+    const nbrs = getNeighbors(simNode.r, simNode.c).filter(n => grid[n.r][n.c] !== 'wall' && !simVis.has(key(n.r, n.c)));
+    if (!nbrs.length) break;
+    simNode = nbrs[Math.floor(Math.random() * nbrs.length)];
+    simVis.add(key(simNode.r, simNode.c));
+    steps++;
+  }
+  if (win === 0) {
+    const dist = heuristic(simNode, g);
+    const startDist = heuristic(s, g);
+    win = Math.max(0, 1 - (dist / startDist));
+  }
+  
+  // Backpropagation
+  let cur = node;
+  while (cur) {
+    cur.visits++;
+    cur.wins += win;
+    cur = cur.parentNode;
+  }
+  
+  as.iteration++;
+  as.visited.add(key(node.r, node.c));
+  markCurrent(node.r, node.c);
+  markVisited(node.r, node.c);
+  
+  consoleLog('step', `MCTS Iteration ${as.iteration} → Simulated from (${node.r},${node.c}), win=${win.toFixed(2)}`);
+  
+  if (as.iteration >= as.maxIterations || (node.r === g.r && node.c === g.c && win === 1)) {
+    // Reconstruct path
+    const parentMap = {};
+    let finalCur = as.root;
+    let pathFound = false;
+    let safeGuard = 0;
+    while (finalCur && safeGuard < 1000) {
+      safeGuard++;
+      if (finalCur.r === g.r && finalCur.c === g.c) { pathFound = true; break; }
+      if (!finalCur.children.length) break;
+      let bestChild = finalCur.children[0];
+      for (let c of finalCur.children) {
+        if (c.visits > bestChild.visits) bestChild = c;
+      }
+      parentMap[key(bestChild.r, bestChild.c)] = key(finalCur.r, finalCur.c);
+      finalCur = bestChild;
+    }
+    if (pathFound || finalCur !== as.root) {
+      return foundGoal(parentMap, key, finalCur.r, finalCur.c);
+    } else {
+      return noPath();
+    }
+  }
+  return false;
+}
 
 function stepBacktracking(s, g, key) {
   const as = algoState;
   if (!as.stack.length) return noPath();
-  const { r, c, path } = as.stack.pop();
-  markCurrent(r, c); markVisited(r, c);
-  consoleLog('step', `BT → (${r},${c}) depth=${path.length}`);
-  if (r === g.r && c === g.c) {
-    path.forEach(k => { const [pr, pc] = k.split(',').map(Number); if (grid[pr][pc] !== 'start' && grid[pr][pc] !== 'goal') { grid[pr][pc] = 'path'; updateCellUI(pr, pc); } });
-    document.getElementById('statPath').textContent = path.length;
-    document.getElementById('infoStatus').textContent = 'Selesai ✓';
-    document.getElementById('infoStatus').style.color = 'var(--accent4)';
-    consoleLog('success', `BT: Path ditemukan! ${path.length} node`);
-    isRunning = false; return true;
+  const cur = as.stack.pop();
+  
+  if (cur.isBacktrack) {
+    as.visited.delete(key(cur.r, cur.c));
+    as.actualPath.pop();
+    return false;
   }
-  getNeighbors(r, c).forEach(n => {
+  
+  const { r, c } = cur;
+  const k = key(r, c);
+  
+  if (as.visited.has(k)) return false;
+  as.visited.add(k);
+  as.actualPath = as.actualPath || [];
+  as.actualPath.push(k);
+  as.stack.push({ isBacktrack: true, r, c });
+
+  markCurrent(r, c); markVisited(r, c);
+  consoleLog('step', `BT → (${r},${c}) depth=${as.actualPath.length}`);
+  if (r === g.r && c === g.c) {
+    const parentMap = {};
+    for (let i = 1; i < as.actualPath.length; i++) parentMap[as.actualPath[i]] = as.actualPath[i-1];
+    return foundGoal(parentMap, key, r, c);
+  }
+  getNeighbors(r, c).reverse().forEach(n => {
     const nk = key(n.r, n.c);
-    if (!path.includes(nk)) { as.parent[nk] = key(r, c); as.stack.push({ ...n, path: [...path, nk] }); markQueued(n.r, n.c); }
+    if (!as.visited.has(nk)) { as.stack.push(n); markQueued(n.r, n.c); }
   });
-  updateQueueDisplay(as.stack);
+  updateQueueDisplay(as.stack.filter(x => !x.isBacktrack));
   return false;
 }
 
-function stepACO(s, g, key) { return stepAStar(s, g, key, false); }
-function stepJPS(s, g, key) { return stepAStar(s, g, key, false); }
+function stepACO(s, g, key) {
+  const as = algoState;
+  
+  if (as.totalIterations >= 1000 || as.iteration >= 200) {
+    if (as.bestPath) {
+      const parentMap = {};
+      for (let i = 1; i < as.bestPath.length; i++) {
+        parentMap[as.bestPath[i]] = as.bestPath[i-1];
+      }
+      const lastK = as.bestPath[as.bestPath.length-1];
+      const r = parseInt(lastK.split(',')[0]);
+      const c = parseInt(lastK.split(',')[1]);
+      return foundGoal(parentMap, key, r, c);
+    }
+    return noPath();
+  }
+  
+  let allDone = true;
+  for (let ant of as.ants) {
+    if (ant.done) continue;
+    allDone = false;
+    const cur = ant.path[ant.path.length - 1];
+    const { r, c } = { r: parseInt(cur.split(',')[0]), c: parseInt(cur.split(',')[1]) };
+    
+    if (r === g.r && c === g.c) {
+      ant.done = true;
+      if (!as.bestPath || ant.path.length < as.bestPath.length) {
+        as.bestPath = [...ant.path];
+      }
+      continue;
+    }
+    
+    const nbrs = getNeighbors(r, c).filter(n => grid[n.r][n.c] !== 'wall' && !ant.visited.has(key(n.r, n.c)));
+    if (!nbrs.length) {
+      ant.done = true;
+      continue;
+    }
+    
+    let totalProb = 0;
+    const probs = [];
+    nbrs.forEach(n => {
+      const k = key(n.r, n.c);
+      const tau = as.pheromone[k] || 0.1;
+      const eta = 1 / (heuristic(n, g) + 0.1);
+      const prob = Math.pow(tau, 1.0) * Math.pow(eta, 2.0);
+      totalProb += prob;
+      probs.push({ node: n, prob });
+    });
+    
+    let nextNode = nbrs[0];
+    if (totalProb > 0) {
+      let rand = Math.random() * totalProb;
+      for (let p of probs) {
+        rand -= p.prob;
+        if (rand <= 0) { nextNode = p.node; break; }
+      }
+    }
+    
+    const nk = key(nextNode.r, nextNode.c);
+    ant.path.push(nk);
+    ant.visited.add(nk);
+    markVisited(nextNode.r, nextNode.c);
+    markCurrent(nextNode.r, nextNode.c);
+  }
+  
+  if (allDone) {
+    as.iteration++;
+    // Evaporation
+    for (let k in as.pheromone) {
+      as.pheromone[k] *= 0.7; // 30% evaporation
+    }
+    // Deposit best path
+    if (as.bestPath) {
+      const deposit = 100 / as.bestPath.length;
+      as.bestPath.forEach(k => {
+        as.pheromone[k] = (as.pheromone[k] || 0.1) + deposit;
+        const [r, c] = k.split(',').map(Number);
+        if (grid[r][c] !== 'start' && grid[r][c] !== 'goal') markQueued(r, c); // Visual indicator
+      });
+    }
+    // Reset ants
+    as.ants = Array.from({ length: 8 }, () => ({ r: s.r, c: s.c, path: [key(s.r, s.c)], visited: new Set([key(s.r, s.c)]), done: false }));
+    consoleLog('step', `ACO Iteration ${as.iteration} | Best Path: ${as.bestPath ? as.bestPath.length : '-'}`);
+  }
+  
+  as.totalIterations++;
+  return false;
+}
+
+function stepJPS(s, g, key) {
+  const as = algoState;
+  if (!as.pq.length) return noPath();
+  as.pq.sort((a, b) => a.f - b.f);
+  const cur = as.pq.shift();
+  const { r, c, g: gv } = cur;
+  const k = key(r, c);
+  
+  if (as.visited.has(k)) return false;
+  as.visited.add(k);
+  markCurrent(r, c); markVisited(r, c);
+  
+  consoleLog('step', `JPS → (${r},${c}) f=${Math.round(cur.f * 10) / 10}`);
+  if (r === g.r && c === g.c) return foundGoal(as.parent, key, r, c);
+  
+  const jump = (startR, startC, dr, dc) => {
+    let r = startR, c = startC;
+    while (true) {
+      let nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= gridRows || nc < 0 || nc >= gridCols || grid[nr][nc] === 'wall') return null;
+      if (nr === g.r && nc === g.c) return { r: nr, c: nc };
+      
+      // Check for forced neighbors
+      if (dr !== 0) { // Moving vertically
+        if ((nc + 1 < gridCols && grid[r][nc + 1] === 'wall' && grid[nr][nc + 1] !== 'wall') ||
+            (nc - 1 >= 0 && grid[r][nc - 1] === 'wall' && grid[nr][nc - 1] !== 'wall')) {
+          return { r: nr, c: nc };
+        }
+      } else { // Moving horizontally
+        if ((nr + 1 < gridRows && grid[nr + 1][c] === 'wall' && grid[nr + 1][nc] !== 'wall') ||
+            (nr - 1 >= 0 && grid[nr - 1][c] === 'wall' && grid[nr - 1][nc] !== 'wall')) {
+          return { r: nr, c: nc };
+        }
+      }
+      r = nr;
+      c = nc;
+    }
+  };
+  
+  const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  dirs.forEach(([dr, dc]) => {
+    const jp = jump(r, c, dr, dc);
+    if (jp) {
+      const jpk = key(jp.r, jp.c);
+      const ng = gv + Math.abs(jp.r - r) + Math.abs(jp.c - c);
+      if (!as.gScore[jpk] || ng < as.gScore[jpk]) {
+        as.gScore[jpk] = ng;
+        as.parent[jpk] = key(r, c);
+        as.pq.push({ ...jp, g: ng, f: ng + heuristic(jp, g) });
+        markQueued(jp.r, jp.c);
+      }
+    }
+  });
+  
+  updateQueueDisplay(as.pq);
+  return false;
+}
 
 // ===================== CONTROLS =====================
 function pauseSimulation() {
@@ -1882,8 +2392,61 @@ function _stepCmp(side) {
       break;
     }
 
-    // All A*-family: astar, greedy, weighted_astar, garislintang, beam, idastar, jps, mcts, ants, hillclimbing, steepest, tabu, ids, dls, simulated_annealing, genetic, minimax, alphabeta, bidirectional
-    default: {
+    case 'greedy': {
+      if (!as.pq.length) return noPFn();
+      as.pq.sort((a, b) => a.h - b.h);
+      const cur = as.pq.shift();
+      const { r, c } = cur;
+      const k = key(r, c);
+      if (as.vis.has(k)) return false;
+      as.vis.add(k); mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      getN(r, c).forEach(n => {
+        const nk = key(n.r, n.c);
+        if (!as.vis.has(nk)) {
+          as.parent.set(nk, key(r, c));
+          as.pq.push({ ...n, h: heur(n.r, n.c) });
+          mQ(n.r, n.c);
+        }
+      });
+      s.queueLen = as.pq.length;
+      break;
+    }
+
+    case 'garislintang': {
+      if (!as.pq.length) return noPFn();
+      as.pq.sort((a, b) => a.f - b.f);
+      const cur = as.pq.shift();
+      const { r, c } = cur;
+      const k = key(r, c);
+      if (as.vis.has(k)) return false;
+      as.vis.add(k); mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      
+      getN(r, c).forEach(n => {
+        const nk = key(n.r, n.c);
+        if (!as.vis.has(nk)) {
+          as.parent.set(nk, key(r, c));
+          const D_goal = heur(n.r, n.c);
+          
+          const sr = cmpStartPos.r, sc = cmpStartPos.c;
+          const gr = goalP.r, gc = goalP.c;
+          let crossTrack = 0;
+          if (sr !== gr || sc !== gc) {
+            const num = Math.abs((gr - sr) * (sc - n.c) - (sr - n.r) * (gc - sc));
+            const den = Math.sqrt(Math.pow(gr - sr, 2) + Math.pow(gc - sc, 2));
+            crossTrack = num / (den || 1);
+          }
+          const f = D_goal + 2.0 * crossTrack;
+          as.pq.push({ ...n, f });
+          mQ(n.r, n.c);
+        }
+      });
+      s.queueLen = as.pq.length;
+      break;
+    }
+
+    case 'astar': case 'weighted_astar': {
       if (!as.pq.length) return noPFn();
       as.pq.sort((a, b) => a.f - b.f);
       const cur = as.pq.shift();
@@ -1892,6 +2455,7 @@ function _stepCmp(side) {
       if (as.vis.has(k)) return false;
       as.vis.add(k); mC(r, c); mV(r, c);
       if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      const weight = algo === 'weighted_astar' ? 2.0 : 1.0;
       getN(r, c).forEach(n => {
         const nk = key(n.r, n.c);
         const ng = gv + 1;
@@ -1899,12 +2463,491 @@ function _stepCmp(side) {
         if (existing === undefined || ng < existing) {
           as.gScore.set(nk, ng);
           as.parent.set(nk, key(r, c));
-          as.pq.push({ ...n, g: ng, f: ng + heur(n.r, n.c) });
+          as.pq.push({ ...n, g: ng, f: ng + weight * heur(n.r, n.c) });
           mQ(n.r, n.c);
         }
       });
       s.queueLen = as.pq.length;
       break;
+    }
+
+    case 'dls': {
+      while (as.stack.length) {
+        const { r, c, depth } = as.stack.pop();
+        const k = key(r, c);
+        if (as.vis.has(k)) continue;
+        as.vis.add(k); mC(r, c); mV(r, c);
+        if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+        if (depth < as.depthLimit) {
+          getN(r, c).reverse().forEach(n => {
+            const nk = key(n.r, n.c);
+            if (!as.vis.has(nk)) { as.parent.set(nk, key(r, c)); as.stack.push({ ...n, depth: depth + 1 }); mQ(n.r, n.c); }
+          });
+        }
+        s.queueLen = as.stack.length;
+        return false;
+      }
+      return noPFn();
+    }
+
+    case 'ids': {
+      if (!as.stack.length) {
+        as.maxDepth++;
+        as.stack = [{ r: cmpStartPos.r, c: cmpStartPos.c, depth: 0 }];
+        as.iterVisited = new Set();
+        as.actualPath = [];
+        if (as.maxDepth > rows * cols) return noPFn();
+        return false;
+      }
+      const cur = as.stack.pop();
+      if (cur.isBacktrack) {
+        as.iterVisited.delete(key(cur.r, cur.c));
+        as.actualPath.pop();
+        return false;
+      }
+      const { r, c, depth } = cur;
+      const k = key(r, c);
+      if (as.iterVisited.has(k)) return false;
+      as.iterVisited.add(k);
+      as.actualPath.push(k);
+      as.stack.push({ isBacktrack: true, r, c });
+      mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) {
+        const parentMap = new Map();
+        for (let i = 1; i < as.actualPath.length; i++) parentMap.set(as.actualPath[i], as.actualPath[i-1]);
+        parentMap.set(as.actualPath[0], -1);
+        return foundGoalFn(parentMap, r, c);
+      }
+      if (depth < as.maxDepth) {
+        getN(r, c).reverse().forEach(n => {
+          const nk = key(n.r, n.c);
+          if (!as.iterVisited.has(nk)) { as.stack.push({ ...n, depth: depth + 1 }); mQ(n.r, n.c); }
+        });
+      }
+      s.queueLen = as.stack.filter(x => !x.isBacktrack).length;
+      return false;
+    }
+
+    case 'idastar': {
+      if (!as.stack.length) {
+        if (as.nextThreshold === Infinity) return noPFn();
+        as.threshold = as.nextThreshold;
+        as.nextThreshold = Infinity;
+        as.stack = [{ r: cmpStartPos.r, c: cmpStartPos.c, g: 0 }];
+        as.iterVisited = new Set();
+        as.actualPath = [];
+        return false;
+      }
+      const cur = as.stack.pop();
+      if (cur.isBacktrack) {
+        as.iterVisited.delete(key(cur.r, cur.c));
+        as.actualPath.pop();
+        return false;
+      }
+      const { r, c, g: gv } = cur;
+      const k = key(r, c);
+      const f = gv + heur(r, c);
+      if (f > as.threshold) { as.nextThreshold = Math.min(as.nextThreshold, f); return false; }
+      if (as.iterVisited.has(k)) return false;
+      as.iterVisited.add(k);
+      as.actualPath.push(k);
+      as.stack.push({ isBacktrack: true, r, c });
+      mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) {
+        const parentMap = new Map();
+        for (let i = 1; i < as.actualPath.length; i++) parentMap.set(as.actualPath[i], as.actualPath[i-1]);
+        parentMap.set(as.actualPath[0], -1);
+        return foundGoalFn(parentMap, r, c);
+      }
+      getN(r, c).reverse().forEach(n => {
+        const nk = key(n.r, n.c);
+        if (!as.iterVisited.has(nk)) { as.stack.push({ ...n, g: gv + 1 }); mQ(n.r, n.c); }
+      });
+      s.queueLen = as.stack.filter(x => !x.isBacktrack).length;
+      return false;
+    }
+
+    case 'beam': {
+      if (!as.beam.length) return noPFn();
+      const beamWidth = 2;
+      const nextGen = [];
+      let found = null;
+      for (const cur of as.beam) {
+        const { r, c } = cur;
+        const k = key(r, c);
+        mC(r, c); mV(r, c);
+        if (r === goalP.r && c === goalP.c) { found = cur; break; }
+        getN(r, c).forEach(n => {
+          const nk = key(n.r, n.c);
+          if (!as.vis.has(nk)) {
+            as.vis.add(nk); as.parent.set(nk, k); mQ(n.r, n.c);
+            nextGen.push({ ...n, h: heur(n.r, n.c) });
+          }
+        });
+      }
+      if (found) return foundGoalFn(as.parent, found.r, found.c);
+      nextGen.sort((a, b) => a.h - b.h);
+      as.beam = nextGen.slice(0, beamWidth);
+      s.queueLen = as.beam.length;
+      return false;
+    }
+
+    case 'hillclimbing': case 'steepest': {
+      const { r, c } = as.current;
+      mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      const nbrs = getN(r, c);
+      if (!nbrs.length) return noPFn();
+      const curH = heur(r, c);
+      let next = null;
+      if (algo === 'steepest') {
+        let bestH = curH;
+        for (const n of nbrs) {
+          const h = heur(n.r, n.c);
+          if (h < bestH) { bestH = h; next = n; }
+        }
+      } else {
+        for (const n of nbrs) {
+          if (heur(n.r, n.c) < curH) { next = n; break; }
+        }
+      }
+      if (!next) return noPFn();
+      as.parent.set(key(next.r, next.c), key(r, c));
+      as.current = next;
+      mQ(next.r, next.c);
+      return false;
+    }
+
+    case 'simulated_annealing': {
+      const { r, c } = as.current;
+      mC(r, c); mV(r, c);
+      as.temp *= as.cooling;
+      if (as.temp < 0.001) return noPFn();
+      if (r === goalP.r && c === goalP.c) {
+        const pMap = new Map();
+        for(let i=1; i<as.actualPath.length; i++) pMap.set(as.actualPath[i], as.actualPath[i-1]);
+        pMap.set(as.actualPath[0], -1);
+        return foundGoalFn(pMap, r, c);
+      }
+      const nbrs = getN(r, c);
+      if (!nbrs.length) return noPFn();
+      const next = nbrs[Math.floor(Math.random() * nbrs.length)];
+      const dE = heur(r, c) - heur(next.r, next.c);
+      const accept = dE > 0 || Math.random() < Math.exp(dE / (as.temp * 0.1));
+      if (accept) {
+        as.actualPath.push(key(next.r, next.c));
+        as.current = next;
+        mQ(next.r, next.c);
+      }
+      return false;
+    }
+
+    case 'tabu': {
+      const { r, c } = as.current;
+      mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) {
+        const pMap = new Map();
+        for(let i=1; i<as.actualPath.length; i++) pMap.set(as.actualPath[i], as.actualPath[i-1]);
+        pMap.set(as.actualPath[0], -1);
+        return foundGoalFn(pMap, r, c);
+      }
+      const nbrs = getN(r, c).filter(n => !as.tabuList.includes(key(n.r, n.c)));
+      if (!nbrs.length) return noPFn();
+      nbrs.sort((a, b) => heur(a.r, a.c) - heur(b.r, b.c));
+      const best = nbrs[0];
+      const bk = key(best.r, best.c);
+      as.actualPath.push(bk);
+      as.tabuList.push(bk);
+      if (as.tabuList.length > as.tabuMax) as.tabuList.shift();
+      as.current = best;
+      mQ(best.r, best.c);
+      return false;
+    }
+
+    case 'bidirectional': {
+      if (as.dirF) {
+        if (!as.queueF.length) return noPFn();
+        const { r, c } = as.queueF.shift();
+        const k = key(r, c);
+        mC(r, c); mV(r, c);
+        if (as.visB.has(k)) {
+          const merged = new Map();
+          let curF = k; while (as.parentF.has(curF)) { merged.set(curF, as.parentF.get(curF)); curF = as.parentF.get(curF); }
+          let curB = k; while (as.parentB.has(curB)) { merged.set(as.parentB.get(curB), curB); curB = as.parentB.get(curB); }
+          merged.set(key(cmpStartPos.r, cmpStartPos.c), -1);
+          return foundGoalFn(merged, goalP.r, goalP.c);
+        }
+        getN(r, c).forEach(n => {
+          const nk = key(n.r, n.c);
+          if (!as.visF.has(nk)) { as.visF.add(nk); as.parentF.set(nk, k); as.queueF.push(n); mQ(n.r, n.c); }
+        });
+        as.dirF = false;
+      } else {
+        if (!as.queueB.length) return noPFn();
+        const { r, c } = as.queueB.shift();
+        const k = key(r, c);
+        mC(r, c); mV(r, c);
+        if (as.visF.has(k)) {
+          const merged = new Map();
+          let curF = k; while (as.parentF.has(curF)) { merged.set(curF, as.parentF.get(curF)); curF = as.parentF.get(curF); }
+          let curB = k; while (as.parentB.has(curB)) { merged.set(as.parentB.get(curB), curB); curB = as.parentB.get(curB); }
+          merged.set(key(cmpStartPos.r, cmpStartPos.c), -1);
+          return foundGoalFn(merged, goalP.r, goalP.c);
+        }
+        getN(r, c).forEach(n => {
+          const nk = key(n.r, n.c);
+          if (!as.visB.has(nk)) { as.visB.add(nk); as.parentB.set(nk, k); as.queueB.push(n); mQ(n.r, n.c); }
+        });
+        as.dirF = true;
+      }
+      return false;
+    }
+
+    case 'jps': {
+      if (!as.pq.length) return noPFn();
+      as.pq.sort((a, b) => a.f - b.f);
+      const cur = as.pq.shift();
+      const { r, c } = cur;
+      const k = key(r, c);
+      if (as.vis.has(k)) return false;
+      as.vis.add(k); mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+
+      const jump = (startR, startC, dr, dc) => {
+        let cr = startR, cc = startC;
+        while(true) {
+          let nr = cr + dr, nc = cc + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || gR[nr][nc] === 'wall') return null;
+          if (nr === goalP.r && nc === goalP.c) return { r: nr, c: nc };
+          if (dr !== 0) {
+            if ((nc + 1 < cols && gR[cr][nc + 1] === 'wall' && gR[nr][nc + 1] !== 'wall') ||
+                (nc - 1 >= 0 && gR[cr][nc - 1] === 'wall' && gR[nr][nc - 1] !== 'wall')) return { r: nr, c: nc };
+          } else {
+            if ((nr + 1 < rows && gR[nr + 1][cc] === 'wall' && gR[nr + 1][nc] !== 'wall') ||
+                (nr - 1 >= 0 && gR[nr - 1][cc] === 'wall' && gR[nr - 1][nc] !== 'wall')) return { r: nr, c: nc };
+          }
+          cr = nr; cc = nc;
+        }
+      };
+
+      const dirs = [[0,1], [1,0], [0,-1], [-1,0]];
+      dirs.forEach(([dr, dc]) => {
+        const jp = jump(r, c, dr, dc);
+        if (jp) {
+          const jpk = key(jp.r, jp.c);
+          const ng = cur.g + Math.abs(jp.r - r) + Math.abs(jp.c - c);
+          const existing = as.gScore.get(jpk);
+          if (existing === undefined || ng < existing) {
+            as.gScore.set(jpk, ng);
+            as.parent.set(jpk, k);
+            as.pq.push({ ...jp, g: ng, f: ng + heur(jp.r, jp.c) });
+            mQ(jp.r, jp.c);
+          }
+        }
+      });
+      s.queueLen = as.pq.length;
+      break;
+    }
+
+    case 'genetic': {
+      if (as.generation > 100) return noPFn();
+      const pop = as.population;
+      pop.sort((a, b) => a.fitness - b.fitness);
+      const best = pop[0];
+      const last = best.path[best.path.length - 1];
+      mC(last.r, last.c);
+      if (last.r === goalP.r && last.c === goalP.c) {
+        const pMap = new Map();
+        for(let i=1; i<best.path.length; i++) pMap.set(key(best.path[i].r, best.path[i].c), key(best.path[i-1].r, best.path[i-1].c));
+        pMap.set(key(best.path[0].r, best.path[0].c), -1);
+        return foundGoalFn(pMap, last.r, last.c);
+      }
+      const nextGen = [];
+      const parentCount = Math.max(2, Math.floor(pop.length * 0.2));
+      for (let i = 0; i < pop.length; i++) {
+        const p1 = pop[Math.floor(Math.random() * parentCount)];
+        const p2 = pop[Math.floor(Math.random() * parentCount)];
+        const intersect = p1.path.filter(n1 => p2.path.some(n2 => n1.r === n2.r && n1.c === n2.c));
+        const pt = intersect.length > 1 ? intersect[Math.floor(Math.random() * intersect.length)] : p1.path[Math.floor(p1.path.length / 2)];
+        const idx1 = p1.path.findIndex(n => n.r === pt.r && n.c === pt.c);
+        let childPath = p1.path.slice(0, idx1 + 1);
+        
+        let cur = childPath[childPath.length - 1];
+        const vis = new Set(childPath.map(n => key(n.r, n.c)));
+        for (let j = 0; j < 40; j++) {
+          const nbrs = getN(cur.r, cur.c).filter(n => !vis.has(key(n.r, n.c)));
+          if (!nbrs.length) break;
+          const n = nbrs[Math.floor(Math.random() * nbrs.length)];
+          childPath.push(n); cur = n;
+          vis.add(key(n.r, n.c));
+          if (cur.r === goalP.r && cur.c === goalP.c) break;
+        }
+        nextGen.push({ path: childPath, fitness: childPath.length + heur(cur.r, cur.c) * 5 });
+      }
+      as.population = nextGen;
+      as.generation++;
+      s.visited += pop.length * 20; 
+      return false;
+    }
+
+    case 'minimax': case 'alphabeta': {
+      const { r, c } = as.current;
+      mC(r, c); mV(r, c);
+      if (r === goalP.r && c === goalP.c) return foundGoalFn(as.parent, r, c);
+      
+      const evaluate = (nr, nc, depth, isMax, pathVis, alpha, beta) => {
+        if (depth === 0 || (nr === goalP.r && nc === goalP.c)) return -heur(nr, nc);
+        const nbrs = getN(nr, nc).filter(n => !as.vis.has(key(n.r, n.c)) && !pathVis.has(key(n.r, n.c)));
+        if (!nbrs.length) return -heur(nr, nc);
+        
+        if (isMax) {
+          let maxEv = -Infinity;
+          for (const n of nbrs) {
+            pathVis.add(key(n.r, n.c));
+            const ev = evaluate(n.r, n.c, depth - 1, false, pathVis, alpha, beta);
+            pathVis.delete(key(n.r, n.c));
+            maxEv = Math.max(maxEv, ev);
+            if (algo === 'alphabeta') { alpha = Math.max(alpha, ev); if (beta <= alpha) break; }
+          }
+          return maxEv;
+        } else {
+          let minEv = Infinity;
+          for (const n of nbrs) {
+            pathVis.add(key(n.r, n.c));
+            const ev = evaluate(n.r, n.c, depth - 1, true, pathVis, alpha, beta);
+            pathVis.delete(key(n.r, n.c));
+            minEv = Math.min(minEv, ev);
+            if (algo === 'alphabeta') { beta = Math.min(beta, ev); if (beta <= alpha) break; }
+          }
+          return minEv;
+        }
+      };
+      
+      const nbrs = getN(r, c).filter(n => !as.vis.has(key(n.r, n.c)));
+      if (!nbrs.length) return noPFn();
+      let bestVal = -Infinity;
+      let bestNext = null;
+      nbrs.forEach(n => {
+        const pVis = new Set([key(n.r, n.c)]);
+        const val = evaluate(n.r, n.c, as.depth - 1, false, pVis, -Infinity, Infinity);
+        mQ(n.r, n.c);
+        if (val > bestVal) { bestVal = val; bestNext = n; }
+      });
+      if (!bestNext) return noPFn();
+      as.parent.set(key(bestNext.r, bestNext.c), key(r, c));
+      as.current = bestNext;
+      return false;
+    }
+
+    case 'mcts': {
+      if (as.maxIterations-- <= 0) return noPFn();
+      const select = (node) => {
+        let n = node;
+        while (n.children.length > 0) {
+          let best = null, bestUcb = -Infinity;
+          n.children.forEach(c => {
+            if (c.visits === 0) { best = c; bestUcb = Infinity; return; }
+            const ucb = (c.wins / c.visits) + Math.sqrt(2 * Math.log(n.visits) / c.visits);
+            if (ucb > bestUcb) { bestUcb = ucb; best = c; }
+          });
+          n = best || n.children[0];
+        }
+        return n;
+      };
+      const node = select(as.root);
+      mC(node.r, node.c); mV(node.r, node.c);
+      if (node.r === goalP.r && node.c === goalP.c) {
+        const pMap = new Map();
+        let cur = node;
+        while(cur.parentNode) { pMap.set(key(cur.r, cur.c), key(cur.parentNode.r, cur.parentNode.c)); cur = cur.parentNode; }
+        pMap.set(key(cmpStartPos.r, cmpStartPos.c), -1);
+        return foundGoalFn(pMap, goalP.r, goalP.c);
+      }
+      if (node.visits > 0 || (node.r === cmpStartPos.r && node.c === cmpStartPos.c)) {
+        let anc = node;
+        const pathSet = new Set();
+        while(anc) { pathSet.add(key(anc.r, anc.c)); anc = anc.parentNode; }
+        const nbrs = getN(node.r, node.c).filter(n => !pathSet.has(key(n.r, n.c)));
+        node.children = nbrs.map(n => ({ r: n.r, c: n.c, parentNode: node, children: [], visits: 0, wins: 0 }));
+      }
+      
+      let simR = node.r, simC = node.c;
+      const simVis = new Set([key(simR, simC)]);
+      for (let step = 0; step < 40; step++) {
+        if (simR === goalP.r && simC === goalP.c) break;
+        const nbrs = getN(simR, simC).filter(n => !simVis.has(key(n.r, n.c)));
+        if (!nbrs.length) break;
+        const next = nbrs[Math.floor(Math.random() * nbrs.length)];
+        simR = next.r; simC = next.c;
+        simVis.add(key(simR, simC));
+      }
+      const dist = heur(simR, simC);
+      const score = dist === 0 ? 1 : 1 / (1 + dist);
+      
+      let anc = node;
+      while (anc) { anc.visits++; anc.wins += score; anc = anc.parentNode; }
+      return false;
+    }
+
+    case 'ants': {
+      if (as.totalIterations >= 1000 || as.iteration >= 200) {
+        if (as.bestPath) {
+          const pMap = new Map();
+          for(let i=1; i<as.bestPath.length; i++) pMap.set(key(as.bestPath[i].r, as.bestPath[i].c), key(as.bestPath[i-1].r, as.bestPath[i-1].c));
+          pMap.set(key(as.bestPath[0].r, as.bestPath[0].c), -1);
+          const last = as.bestPath[as.bestPath.length-1];
+          return foundGoalFn(pMap, last.r, last.c);
+        }
+        return noPFn();
+      }
+      let allDone = true;
+      let ants = as.ants || Array(10).fill().map(() => ({ path: [{r: cmpStartPos.r, c: cmpStartPos.c}], vis: new Set([key(cmpStartPos.r, cmpStartPos.c)]), done: false, win: false }));
+      
+      ants.forEach(ant => {
+        if (ant.done) return;
+        allDone = false;
+        const cur = ant.path[ant.path.length - 1];
+        mC(cur.r, cur.c); mV(cur.r, cur.c);
+        if (cur.r === goalP.r && cur.c === goalP.c) { ant.done = true; ant.win = true; return; }
+        const nbrs = getN(cur.r, cur.c).filter(n => !ant.vis.has(key(n.r, n.c)));
+        if (!nbrs.length) { ant.done = true; return; }
+        
+        let probs = [];
+        let sum = 0;
+        nbrs.forEach(n => {
+          const k = key(cur.r, cur.c) + '-' + key(n.r, n.c);
+          const tau = as.pheromone.has(k) ? as.pheromone.get(k) : 1;
+          const eta = 1 / (1 + heur(n.r, n.c));
+          const p = Math.pow(tau, 1) * Math.pow(eta, 2);
+          probs.push({ n, p });
+          sum += p;
+        });
+        let rnd = Math.random() * sum;
+        let next = nbrs[0];
+        for (const prob of probs) { rnd -= prob.p; if (rnd <= 0) { next = prob.n; break; } }
+        
+        ant.path.push(next);
+        ant.vis.add(key(next.r, next.c));
+      });
+      as.ants = ants;
+      if (allDone) {
+        as.ants.forEach(ant => {
+          const len = ant.path.length;
+          const end = ant.path[len - 1];
+          const dist = heur(end.r, end.c);
+          if (dist < as.bestDist) { as.bestDist = dist; as.bestPath = ant.path; }
+          const deposit = ant.win ? (100 / len) : (1 / (dist + 1));
+          for (let i = 0; i < len - 1; i++) {
+            const k = key(ant.path[i].r, ant.path[i].c) + '-' + key(ant.path[i+1].r, ant.path[i+1].c);
+            as.pheromone.set(k, (as.pheromone.get(k) || 1) + deposit);
+          }
+        });
+        as.pheromone.forEach((v, k) => as.pheromone.set(k, v * 0.9));
+        as.iteration++;
+        as.ants = null;
+      }
+      as.totalIterations++;
+      return false;
     }
   }
   return false;
@@ -1921,20 +2964,95 @@ function _initCmpAlgo(algo, s, g) {
   };
   as.parent.set(key(s.r, s.c), -1);
 
+  const heur = (r, c) => Math.abs(r - g.r) + Math.abs(c - g.c);
   switch (algo) {
     case 'bfs':
       as.queue.push({ r: s.r, c: s.c });
       as.vis.add(key(s.r, s.c));
       break;
-    case 'dfs': case 'backtracking': case 'ids': case 'dls':
+    case 'dfs':
       as.stack.push({ r: s.r, c: s.c });
+      break;
+    case 'dls':
+      as.depthLimit = parseInt(document.getElementById('depthLimitSel').value) || 10;
+      as.stack.push({ r: s.r, c: s.c, depth: 0 });
+      break;
+    case 'ids':
+      as.maxDepth = 0;
+      as.stack = [{ r: s.r, c: s.c, depth: 0 }];
+      as.iterVisited = new Set();
+      as.actualPath = [];
+      break;
+    case 'idastar':
+      as.threshold = heur(s.r, s.c);
+      as.stack = [{ r: s.r, c: s.c, g: 0 }];
+      as.nextThreshold = Infinity;
+      as.iterVisited = new Set();
+      as.actualPath = [];
+      break;
+    case 'beam':
+      as.beam = [{ r: s.r, c: s.c, h: heur(s.r, s.c) }];
+      break;
+    case 'hillclimbing': case 'steepest':
+      as.current = { r: s.r, c: s.c };
+      as.vis.add(key(s.r, s.c));
+      break;
+    case 'simulated_annealing':
+      as.current = { r: s.r, c: s.c };
+      as.temp = 200; as.cooling = 0.995;
+      as.vis.add(key(s.r, s.c));
+      as.bestDist = heur(s.r, s.c);
+      as.bestPos = { r: s.r, c: s.c };
+      as.actualPath = [key(s.r, s.c)];
+      break;
+    case 'tabu':
+      as.current = { r: s.r, c: s.c };
+      as.tabuList = [key(s.r, s.c)]; as.tabuMax = 15;
+      as.actualPath = [key(s.r, s.c)];
+      break;
+    case 'genetic':
+      as.population = generatePopulation(s, g, 20); // Note: we can reuse this since it uses start/goal pos natively
+      as.generation = 0;
+      break;
+    case 'minimax': case 'alphabeta':
+      as.current = { r: s.r, c: s.c };
+      as.depth = 3;
+      as.vis.add(key(s.r, s.c));
+      break;
+    case 'mcts':
+      as.root = { r: s.r, c: s.c, parentNode: null, children: [], visits: 0, wins: 0 };
+      as.maxIterations = 300;
+      break;
+    case 'backtracking':
+      as.stack = [{ r: s.r, c: s.c }];
+      as.vis.add(key(s.r, s.c));
+      break;
+    case 'ants':
+      as.pheromone = new Map();
+      as.totalIterations = 0; as.iteration = 0;
+      as.bestPath = null; as.bestDist = Infinity;
+      break;
+    case 'bidirectional':
+      as.queueF = [{ r: s.r, c: s.c }];
+      as.queueB = [{ r: g.r, c: g.c }];
+      as.visF = new Set([key(s.r, s.c)]);
+      as.visB = new Set([key(g.r, g.c)]);
+      as.parentF = new Map();
+      as.parentB = new Map();
+      as.dirF = true;
       break;
     case 'ucs':
       as.pq.push({ r: s.r, c: s.c, cost: 0 });
       as.costMap.set(key(s.r, s.c), 0);
       break;
-    default: // A*-family
-      as.pq.push({ r: s.r, c: s.c, g: 0, f: Math.abs(s.r - g.r) + Math.abs(s.c - g.c) });
+    case 'greedy':
+      as.pq.push({ r: s.r, c: s.c, h: heur(s.r, s.c) });
+      break;
+    case 'garislintang':
+      as.pq.push({ r: s.r, c: s.c, f: heur(s.r, s.c) });
+      break;
+    default: // astar, weighted_astar, jps
+      as.pq.push({ r: s.r, c: s.c, g: 0, f: heur(s.r, s.c) });
       as.gScore.set(key(s.r, s.c), 0);
       break;
   }
