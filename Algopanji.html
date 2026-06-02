@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Algoritma Pencarian - Priority-Based Search</title>
+    <style>
+        :root {
+            --bg: #1a1b1e;
+            --panel-bg: #25262b;
+            --text: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #4dabf7;
+            --accent2: #20c997;
+            --danger: #fa5252;
+            --warning: #ffc078;
+            --border: #3a3b3f;
+            --btn-bg: #333538;
+            --btn-hover: #404245;
+            --input-bg: #2a2b2f;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--text);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .container {
+            background: var(--panel-bg);
+            border-radius: 20px;
+            padding: 28px 30px 24px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 750px;
+            width: 100%;
+            border: 1px solid var(--border);
+        }
+
+        .header {
+            text-align: center;
+            width: 100%;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .header .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+        .formula-badge {
+            display: inline-block;
+            background: #2d2e33;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.8rem;
+            color: #ffc078;
+            margin-top: 6px;
+            letter-spacing: 0.02em;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 0 0 2px var(--border);
+            cursor: crosshair;
+            line-height: 0;
+            background: #1e1f23;
+        }
+        .canvas-wrapper.dragging-a,
+        .canvas-wrapper.dragging-b {
+            cursor: grabbing;
+        }
+        canvas {
+            display: block;
+            border-radius: 12px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+        .btn {
+            padding: 9px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--btn-bg);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+            letter-spacing: 0.01em;
+        }
+        .btn:hover {
+            background: var(--btn-hover);
+            border-color: #555;
+            transform: translateY(-1px);
+        }
+        .btn:active {
+            transform: scale(0.97);
+            transition: transform 0.08s;
+        }
+        .btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #111;
+            font-weight: 600;
+        }
+        .btn.primary:hover {
+            background: #5cbcf8;
+            border-color: #5cbcf8;
+        }
+        .btn.accent2 {
+            background: var(--accent2);
+            border-color: var(--accent2);
+            color: #111;
+            font-weight: 600;
+        }
+        .btn.accent2:hover {
+            background: #38d9a9;
+            border-color: #38d9a9;
+        }
+        .btn.danger {
+            background: transparent;
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .btn.danger:hover {
+            background: rgba(250, 82, 82, 0.12);
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--input-bg);
+            padding: 7px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .slider-group label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+        .slider-group input[type="range"] {
+            width: 80px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .slider-group .val {
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: #ffc078;
+            min-width: 28px;
+            text-align: center;
+            font-family: 'SF Mono', 'Consolas', monospace;
+        }
+
+        .info-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            width: 100%;
+            padding: 10px 16px;
+            background: var(--input-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .info-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .info-dot.start {
+            background: #40c057;
+        }
+        .info-dot.goal {
+            background: #fa5252;
+        }
+        .info-dot.obstacle {
+            background: #5c5f66;
+        }
+        .info-dot.line-clear {
+            background: rgba(255, 212, 59, 0.7);
+        }
+        .info-dot.line-block {
+            background: rgba(250, 82, 82, 0.8);
+        }
+        .info-dot.explored {
+            background: #748ffc;
+        }
+        .info-dot.frontier {
+            background: #ff922b;
+        }
+        .info-dot.path {
+            background: #20c997;
+        }
+
+        .status-text {
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-align: center;
+            min-height: 22px;
+            color: #fff;
+            letter-spacing: 0.01em;
+        }
+        .status-text.found {
+            color: #20c997;
+        }
+        .status-text.blocked {
+            color: #fa5252;
+        }
+        .status-text.searching {
+            color: #ffc078;
+        }
+
+        .tip {
+            font-size: 0.72rem;
+            color: #666;
+            text-align: center;
+            margin-top: -4px;
+        }
+
+        @media (max-width: 660px) {
+            .container {
+                padding: 14px 10px 16px;
+                gap: 12px;
+                border-radius: 14px;
+            }
+            .btn {
+                padding: 7px 11px;
+                font-size: 0.75rem;
+                border-radius: 8px;
+            }
+            .slider-group {
+                padding: 5px 10px;
+                gap: 4px;
+            }
+            .slider-group input[type="range"] {
+                width: 50px;
+            }
+            .info-panel {
+                gap: 6px;
+                font-size: 0.7rem;
+                padding: 8px 10px;
+            }
+            .header h1 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Priority-Based Path Search</h1>
+            <p class="subtitle">Visualisasi algoritma pencarian dengan deteksi tabrakan & prioritas belokan</p>
+            <span class="formula-badge">Score = D<sub>goal</sub> + k × T</span>
+        </div>
+
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="mainCanvas"></canvas>
+        </div>
+
+        <p class="status-text" id="statusText">🖱️ Klik pada grid untuk menambah/hapus rintangan. Geser titik A (hijau) atau B (merah).</p>
+
+        <div class="info-panel" id="infoPanel">
+            <span class="info-item"><span class="info-dot start"></span> Titik Awal</span>
+            <span class="info-item"><span class="info-dot goal"></span> Titik Tujuan</span>
+            <span class="info-item"><span class="info-dot obstacle"></span> Rintangan</span>
+            <span class="info-item"><span class="info-dot line-clear"></span> Garis Lurus</span>
+            <span class="info-item"><span class="info-dot line-block"></span> Tabrakan</span>
+            <span class="info-item"><span class="info-dot explored"></span> Dieksplorasi</span>
+            <span class="info-item"><span class="info-dot frontier"></span> Kandidat</span>
+            <span class="info-item"><span class="info-dot path"></span> Jalur Final</span>
+        </div>
+
+        <div class="controls" id="controls">
+            <button class="btn primary" id="btnAutoSearch">▶ Auto Search</button>
+            <button class="btn accent2" id="btnStepSearch">⏭️ Step by Step</button>
+            <button class="btn danger" id="btnReset">↺ Reset Search</button>
+            <button class="btn" id="btnRandomObs">🎲 Rintangan Acak</button>
+            <button class="btn" id="btnClearObs">🧹 Hapus Rintangan</button>
+            <div class="slider-group">
+                <label for="kSlider">k =</label>
+                <input type="range" id="kSlider" min="0.2" max="8" step="0.1" value="2.5">
+                <span class="val" id="kValue">2.5</span>
+            </div>
+            <div class="slider-group">
+                <label for="speedSlider">⏱️</label>
+                <input type="range" id="speedSlider" min="1" max="20" value="8">
+                <span class="val" id="speedValue">8</span>
+            </div>
+        </div>
+        <p class="tip">💡 Geser titik <b>A</b> dan <b>B</b> | Klik grid untuk rintangan | <b>k</b> = bobot penalti penyimpangan dari garis lurus</p>
+    </div>
+
+    <script>
+        (function() {
+            // ==================== KONFIGURASI ====================
+            const COLS = 20;
+            const ROWS = 15;
+            const CELL_SIZE = 30;
+            const CANVAS_WIDTH = COLS * CELL_SIZE;
+            const CANVAS_HEIGHT = ROWS * CELL_SIZE;
+
+            // Posisi default
+            const DEFAULT_START = { col: 2, row: 7 };
+            const DEFAULT_GOAL = { col: 17, row: 7 };
+
+            // ==================== ELEMEN DOM ====================
+            const canvas = document.getElementById('mainCanvas');
+            const ctx = canvas.getContext('2d');
+            const canvasWrapper = document.getElementById('canvasWrapper');
+            const statusText = document.getElementById('statusText');
+            const kSlider = document.getElementById('kSlider');
+            const kValueEl = document.getElementById('kValue');
+            const speedSlider = document.getElementById('speedSlider');
+            const speedValueEl = document.getElementById('speedValue');
+            const btnAutoSearch = document.getElementById('btnAutoSearch');
+            const btnStepSearch = document.getElementById('btnStepSearch');
+            const btnReset = document.getElementById('btnReset');
+            const btnRandomObs = document.getElementById('btnRandomObs');
+            const btnClearObs = document.getElementById('btnClearObs');
+
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            canvasWrapper.style.width = CANVAS_WIDTH + 'px';
+            canvasWrapper.style.height = CANVAS_HEIGHT + 'px';
+
+            // ==================== STATE ====================
+            let grid = []; // 0 = kosong, 1 = rintangan
+            let startPos = { ...DEFAULT_START };
+            let goalPos = { ...DEFAULT_GOAL };
+            let kValue = parseFloat(kSlider.value);
+            let animSpeed = parseInt(speedSlider.value);
+
+            // Search state
+            let searchResult = null; // hasil dari runFullSearch()
+            let animStepIndex = -1;
+            let animTimerId = null;
+            let isSearching = false;
+            let searchMode = null; // 'auto' | 'step' | null
+
+            // Drag state
+            let dragMode = null; // 'A' | 'B' | null
+            let isDragging = false;
+            let mouseDownPos = null;
+
+            // ==================== FUNGSI GRID ====================
+            function initGrid() {
+                grid = [];
+                for (let r = 0; r < ROWS; r++) {
+                    grid[r] = new Array(COLS).fill(0);
+                }
+            }
+
+            function isObstacle(col, row) {
+                if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true; // batas = rintangan
+                return grid[row][col] === 1;
+            }
+
+            function isStartOrGoal(col, row) {
+                return (col === startPos.col && row === startPos.row) ||
+                    (col === goalPos.col && row === goalPos.row);
+            }
+
+            function cellCenter(col, row) {
+                return {
+                    x: col * CELL_SIZE + CELL_SIZE / 2,
+                    y: row * CELL_SIZE + CELL_SIZE / 2
+                };
+            }
+
+            function gridFromPixel(px, py) {
+                const col = Math.floor(px / CELL_SIZE);
+                const row = Math.floor(py / CELL_SIZE);
+                return { col, row };
+            }
+
+            function isValidCell(col, row) {
+                return col >= 0 && col < COLS && row >= 0 && row < ROWS;
+            }
+
+            // ==================== GEOMETRI ====================
+            function distance2D(x1, y1, x2, y2) {
+                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+            }
+
+            function perpendicularDistance(px, py, ax, ay, bx, by) {
+                // Jarak titik P ke garis melalui A-B (garis tak hingga)
+                const dx = bx - ax;
+                const dy = by - ay;
+                const lenSq = dx * dx + dy * dy;
+                if (lenSq === 0) return distance2D(px, py, ax, ay);
+                // Rumus: |(B-A) × (A-P)| / |B-A|
+                const cross = Math.abs(dx * (ay - py) - (ax - px) * dy);
+                return cross / Math.sqrt(lenSq);
+            }
+
+            function getDirectLineCells() {
+                // Dapatkan semua sel yang dilewati garis lurus A→B
+                const aCenter = cellCenter(startPos.col, startPos.row);
+                const bCenter = cellCenter(goalPos.col, goalPos.row);
+                const totalDist = distance2D(aCenter.x, aCenter.y, bCenter.x, bCenter.y);
+                const cells = new Set();
+                const numSamples = Math.max(200, Math.ceil(totalDist / 2));
+                for (let i = 0; i <= numSamples; i++) {
+                    const t = i / numSamples;
+                    const x = aCenter.x + t * (bCenter.x - aCenter.x);
+                    const y = aCenter.y + t * (bCenter.y - aCenter.y);
+                    const { col, row } = gridFromPixel(x, y);
+                    if (isValidCell(col, row)) {
+                        cells.add(`${col},${row}`);
+                    }
+                }
+                return Array.from(cells).map(s => {
+                    const [c, r] = s.split(',').map(Number);
+                    return { col: c, row: r };
+                });
+            }
+
+            function getCollisionCells() {
+                // Sel pada garis lurus yang merupakan rintangan
+                const lineCells = getDirectLineCells();
+                return lineCells.filter(cell => isObstacle(cell.col, cell.row));
+            }
+
+            // ==================== ALGORITMA PENCARIAN ====================
+            function calculateScore(col, row) {
+                const aCenter = cellCenter(startPos.col, startPos.row);
+                const bCenter = cellCenter(goalPos.col, goalPos.row);
+                const pCenter = cellCenter(col, row);
+
+                // D_goal: jarak kandidat ke tujuan (dalam unit grid)
+                const dGoalPixels = distance2D(pCenter.x, pCenter.y, bCenter.x, bCenter.y);
+                const D_goal = dGoalPixels / CELL_SIZE;
+
+                // T: penalti = jarak tegak lurus ke garis A-B (dalam unit grid)
+                const tPixels = perpendicularDistance(pCenter.x, pCenter.y, aCenter.x, aCenter.y, bCenter.x,
+                bCenter.y);
+                const T = tPixels / CELL_SIZE;
+
+                const score = D_goal + kValue * T;
+                return { score, D_goal, T };
+            }
+
+            function getNeighbors(col, row) {
+                const neighbors = [];
+                // 8 arah
+                const dirs = [
+                    { dc: -1, dr: -1 }, { dc: 0, dr: -1 }, { dc: 1, dr: -1 },
+                    { dc: -1, dr: 0 }, { dc: 1, dr: 0 },
+                    { dc: -1, dr: 1 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }
+                ];
+                for (const dir of dirs) {
+                    const nc = col + dir.dc;
+                    const nr = row + dir.dr;
+                    if (isValidCell(nc, nr) && !isObstacle(nc, nr) && !isStartOrGoal(nc, nr)) {
+                        neighbors.push({ col: nc, row: nr });
+                    }
+                }
+                // Juga bisa memasukkan goal jika bertetangga
+                for (const dir of dirs) {
+                    const nc = col + dir.dc;
+                    const nr = row + dir.dr;
+                    if (nc === goalPos.col && nr === goalPos.row) {
+                        neighbors.push({ col: nc, row: nr });
+                    }
+                }
+                return neighbors;
+            }
+
+            function runFullSearch() {
+                // Best-first search menggunakan priority formula
+                const startKey = `${startPos.col},${startPos.row}`;
+                const goalKey = `${goalPos.col},${goalPos.row}`;
+
+                const explored = new Set();
+                const cameFrom = {};
+                const frontierCells = []; // array of {col, row, score, D_goal, T}
+                const frontierSet = new Set(); // untuk lookup cepat
+
+                // Inisialisasi frontier dengan start
+                const startScoreData = calculateScore(startPos.col, startPos.row);
+                frontierCells.push({
+                    col: startPos.col,
+                    row: startPos.row,
+                    score: startScoreData.score,
+                    D_goal: startScoreData.D_goal,
+                    T: startScoreData.T
+                });
+                frontierSet.add(startKey);
+                cameFrom[startKey] = null;
+
+                const steps = []; // rekaman setiap ekspansi
+                let found = false;
+                let finalPathCells = [];
+
+                while (frontierCells.length > 0) {
+                    // Cari sel dengan score terkecil di frontier
+                    let bestIdx = 0;
+                    for (let i = 1; i < frontierCells.length; i++) {
+                        if (frontierCells[i].score < frontierCells[bestIdx].score) {
+                            bestIdx = i;
+                        }
+                    }
+                    const current = frontierCells[bestIdx];
+                    frontierCells.splice(bestIdx, 1);
+                    const currentKey = `${current.col},${current.row}`;
+                    frontierSet.delete(currentKey);
+
+                    if (explored.has(currentKey)) continue;
+                    explored.add(currentKey);
+
+                    // Rekam step
+                    const stepData = {
+                        expandedCell: { col: current.col, row: current.row },
+                        score: current.score,
+                        D_goal: current.D_goal,
+                        T: current.T,
+                        exploredCount: explored.size,
+                        frontierSnapshot: frontierCells.map(f => ({ col: f.col, row: f.row, score: f.score,
+                            D_goal: f.D_goal, T: f.T })),
+                    };
+                    steps.push(stepData);
+
+                    // Cek apakah mencapai tujuan
+                    if (current.col === goalPos.col && current.row === goalPos.row) {
+                        found = true;
+                        // Rekonstruksi jalur
+                        finalPathCells = [];
+                        let k = goalKey;
+                        while (k !== null) {
+                            const [c, r] = k.split(',').map(Number);
+                            finalPathCells.unshift({ col: c, row: r });
+                            k = cameFrom[k];
+                        }
+                        stepData.foundGoal = true;
+                        stepData.finalPath = [...finalPathCells];
+                        break;
+                    }
+
+                    // Ekspansi ke tetangga
+                    const neighbors = getNeighbors(current.col, current.row);
+                    for (const n of neighbors) {
+                        const nKey = `${n.col},${n.row}`;
+                        if (explored.has(nKey)) continue;
+                        if (frontierSet.has(nKey)) continue;
+                        const scoreData = calculateScore(n.col, n.row);
+                        frontierCells.push({
+                            col: n.col,
+                            row: n.row,
+                            score: scoreData.score,
+                            D_goal: scoreData.D_goal,
+                            T: scoreData.T
+                        });
+                        frontierSet.add(nKey);
+                        if (!cameFrom[nKey]) {
+                            cameFrom[nKey] = currentKey;
+                        }
+                    }
+                }
+
+                return {
+                    found,
+                    steps,
+                    finalPathCells,
+                    explored,
+                    totalExplored: explored.size,
+                };
+            }
+
+            // ==================== DRAWING ====================
+            function clearCanvas() {
+                ctx.fillStyle = '#1e1f23';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            }
+
+            function drawGridLines() {
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.lineWidth = 0.7;
+                for (let c = 0; c <= COLS; c++) {
+                    const x = c * CELL_SIZE;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, CANVAS_HEIGHT);
+                    ctx.stroke();
+                }
+                for (let r = 0; r <= ROWS; r++) {
+                    const y = r * CELL_SIZE;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(CANVAS_WIDTH, y);
+                    ctx.stroke();
+                }
+            }
+
+            function drawCell(col, row, color, alpha = 1) {
+                const x = col * CELL_SIZE;
+                const y = row * CELL_SIZE;
+                ctx.fillStyle = color;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.globalAlpha = 1;
+            }
+
+            function drawCellBorder(col, row, color, lineWidth = 2.5) {
+                const x = col * CELL_SIZE;
+                const y = row * CELL_SIZE;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.strokeRect(x + 1.5, y + 1.5, CELL_SIZE - 3, CELL_SIZE - 3);
+            }
+
+            function drawObstacles() {
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (grid[r][c] === 1) {
+                            drawCell(c, r, '#5c5f66');
+                            // Pola garis silang kecil
+                            const cx = c * CELL_SIZE + CELL_SIZE / 2;
+                            const cy = r * CELL_SIZE + CELL_SIZE / 2;
+                            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                            ctx.lineWidth = 1.5;
+                            const s = CELL_SIZE * 0.28;
+                            ctx.beginPath();
+                            ctx.moveTo(cx - s, cy - s);
+                            ctx.lineTo(cx + s, cy + s);
+                            ctx.moveTo(cx + s, cy - s);
+                            ctx.lineTo(cx - s, cy + s);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            function drawDirectLineHighlight() {
+                const lineCells = getDirectLineCells();
+                const collisionSet = new Set(getCollisionCells().map(c => `${c.col},${c.row}`));
+
+                for (const cell of lineCells) {
+                    if (isStartOrGoal(cell.col, cell.row)) continue;
+                    const key = `${cell.col},${cell.row}`;
+                    if (collisionSet.has(key)) {
+                        // Tabrakan
+                        drawCell(cell.col, cell.row, '#fa5252', 0.55);
+                        // Tanda seru / blok
+                        const cx = cell.col * CELL_SIZE + CELL_SIZE / 2;
+                        const cy = cell.row * CELL_SIZE + CELL_SIZE / 2;
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 16px "Segoe UI", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('⚠', cx, cy);
+                    } else {
+                        // Garis lurus aman
+                        drawCell(cell.col, cell.row, '#ffd43b', 0.35);
+                    }
+                }
+            }
+
+            function drawGeometricLine() {
+                const aCenter = cellCenter(startPos.col, startPos.row);
+                const bCenter = cellCenter(goalPos.col, goalPos.row);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 6]);
+                ctx.beginPath();
+                ctx.moveTo(aCenter.x, aCenter.y);
+                ctx.lineTo(bCenter.x, bCenter.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            function drawStartGoal() {
+                // Start A
+                const aCenter = cellCenter(startPos.col, startPos.row);
+                drawCell(startPos.col, startPos.row, '#40c057', 0.9);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px "Segoe UI", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('A', aCenter.x, aCenter.y);
+                // Lingkaran glow
+                ctx.strokeStyle = '#40c057';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(aCenter.x, aCenter.y, CELL_SIZE * 0.42, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Goal B
+                const bCenter = cellCenter(goalPos.col, goalPos.row);
+                drawCell(goalPos.col, goalPos.row, '#fa5252', 0.9);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px "Segoe UI", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('B', bCenter.x, bCenter.y);
+                ctx.strokeStyle = '#fa5252';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(bCenter.x, bCenter.y, CELL_SIZE * 0.42, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            function drawSearchVisualization(stepData, exploredSet, finalPathCells) {
+                if (!stepData) return;
+
+                // Draw explored cells with score-based coloring
+                if (exploredSet && exploredSet.size > 0) {
+                    // Kumpulkan semua score untuk normalisasi
+                    let allScores = [];
+                    for (const key of exploredSet) {
+                        // Kita tidak menyimpan score di explored set, jadi gunakan warna default
+                        allScores.push(0);
+                    }
+                    // Untuk visual yang lebih baik, kita warnai explored dengan gradien ringan
+                    for (const key of exploredSet) {
+                        const [c, r] = key.split(',').map(Number);
+                        if (isStartOrGoal(c, r)) continue;
+                        if (grid[r] && grid[r][c] === 1) continue;
+                        // Cek apakah di final path
+                        const inFinalPath = finalPathCells && finalPathCells.some(p => p.col === c && p.row ===
+                            r);
+                        if (inFinalPath) continue;
+                        drawCell(c, r, '#5c7cfa', 0.25);
+                    }
+                }
+
+                // Draw frontier snapshot
+                if (stepData.frontierSnapshot && stepData.frontierSnapshot.length > 0) {
+                    // Normalisasi score frontier untuk warna
+                    const scores = stepData.frontierSnapshot.map(f => f.score);
+                    const minScore = Math.min(...scores);
+                    const maxScore = Math.max(...scores);
+                    const scoreRange = maxScore - minScore || 1;
+
+                    for (const f of stepData.frontierSnapshot) {
+                        if (isStartOrGoal(f.col, f.row)) continue;
+                        // Normalisasi: score rendah = lebih cerah (oranye-kuning)
+                        const normalized = (f.score - minScore) / scoreRange; // 0=terbaik, 1=terburuk
+                        const alpha = 0.4 + 0.35 * (1 - normalized);
+                        drawCell(f.col, f.row, '#ff922b', alpha);
+                        drawCellBorder(f.col, f.row, '#ff922b', 1.8);
+                    }
+                }
+
+                // Highlight cell yang sedang diekspansi
+                if (stepData.expandedCell && !stepData.foundGoal) {
+                    const ec = stepData.expandedCell;
+                    if (!isStartOrGoal(ec.col, ec.row)) {
+                        drawCellBorder(ec.col, ec.row, '#ffd43b', 3);
+                        // Lingkaran pulse
+                        const center = cellCenter(ec.col, ec.row);
+                        ctx.strokeStyle = '#ffd43b';
+                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 0.7;
+                        ctx.beginPath();
+                        ctx.arc(center.x, center.y, CELL_SIZE * 0.35, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
+                }
+
+                // Draw final path
+                if (finalPathCells && finalPathCells.length > 0) {
+                    // Garis tebal connecting path
+                    if (finalPathCells.length >= 2) {
+                        ctx.strokeStyle = '#20c997';
+                        ctx.lineWidth = 4;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.globalAlpha = 0.8;
+                        ctx.beginPath();
+                        const firstCenter = cellCenter(finalPathCells[0].col, finalPathCells[0].row);
+                        ctx.moveTo(firstCenter.x, firstCenter.y);
+                        for (let i = 1; i < finalPathCells.length; i++) {
+                            const ctr = cellCenter(finalPathCells[i].col, finalPathCells[i].row);
+                            ctx.lineTo(ctr.x, ctr.y);
+                        }
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
+
+                    // Sel-sel jalur
+                    for (const p of finalPathCells) {
+                        if (isStartOrGoal(p.col, p.row)) continue;
+                        drawCell(p.col, p.row, '#20c997', 0.7);
+                        drawCellBorder(p.col, p.row, '#20c997', 2);
+                    }
+                    // Titik-titik pada jalur
+                    for (const p of finalPathCells) {
+                        if (isStartOrGoal(p.col, p.row)) continue;
+                        const ctr = cellCenter(p.col, p.row);
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath();
+                        ctx.arc(ctr.x, ctr.y, 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // Jika goal ditemukan di step ini, highlight goal
+                if (stepData.foundGoal) {
+                    const bCenter = cellCenter(goalPos.col, goalPos.row);
+                    ctx.strokeStyle = '#ffd43b';
+                    ctx.lineWidth = 3.5;
+                    ctx.globalAlpha = 0.8;
+                    ctx.beginPath();
+                    ctx.arc(bCenter.x, bCenter.y, CELL_SIZE * 0.5, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            function drawAll(stepData = null, exploredSet = null, finalPathCells = null) {
+                clearCanvas();
+                drawDirectLineHighlight();
+                drawGeometricLine();
+                drawObstacles();
+                drawSearchVisualization(stepData, exploredSet, finalPathCells);
+                drawGridLines();
+                drawStartGoal();
+
+                // Info skor di pojok jika ada step
+                if (stepData && stepData.expandedCell && !isStartOrGoal(stepData.expandedCell.col, stepData
+                    .expandedCell.row)) {
+                    const ec = stepData.expandedCell;
+                    const ctr = cellCenter(ec.col, ec.row);
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    const labelW = 95;
+                    const labelH = 38;
+                    const lx = Math.min(Math.max(ctr.x - labelW / 2, 5), CANVAS_WIDTH - labelW - 5);
+                    const ly = Math.max(ctr.y - labelH - 10, 5);
+                    ctx.fillRect(lx, ly, labelW, labelH);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '9px "SF Mono", "Consolas", monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`Score: ${stepData.score.toFixed(1)}`, lx + 6, ly + 13);
+                    ctx.fillText(`D_goal: ${stepData.D_goal.toFixed(1)}`, lx + 6, ly + 25);
+                    ctx.fillText(`T: ${stepData.T.toFixed(1)}`, lx + 6, ly + 37);
+                }
+            }
+
+            // ==================== ANIMASI ====================
+            function stopAnimation() {
+                if (animTimerId) {
+                    clearTimeout(animTimerId);
+                    animTimerId = null;
+                }
+                isSearching = false;
+                searchMode = null;
+            }
+
+            function resetSearch() {
+                stopAnimation();
+                searchResult = null;
+                animStepIndex = -1;
+                isSearching = false;
+                searchMode = null;
+                updateButtons();
+                drawAll(null, null, null);
+                const collisionCells = getCollisionCells();
+                if (collisionCells.length > 0) {
+                    statusText.innerHTML =
+                        `⚠️ <span style="color:#fa5252;">${collisionCells.length} sel tabrakan terdeteksi</span> — garis lurus terhalang rintangan.`;
+                    statusText.className = 'status-text blocked';
+                } else {
+                    statusText.innerHTML = '✅ Garis lurus bebas rintangan. Klik <b>Auto Search</b> atau <b>Step by Step</b>.';
+                    statusText.className = 'status-text';
+                }
+            }
+
+            function showStep(stepIndex) {
+                if (!searchResult || stepIndex < 0 || stepIndex >= searchResult.steps.length) return;
+                animStepIndex = stepIndex;
+                const stepData = searchResult.steps[stepIndex];
+                const exploredUpToNow = new Set();
+                for (let i = 0; i <= stepIndex; i++) {
+                    const s = searchResult.steps[i];
+                    exploredUpToNow.add(`${s.expandedCell.col},${s.expandedCell.row}`);
+                }
+                const finalPath = (stepData.foundGoal && stepData.finalPath) ? stepData.finalPath : null;
+                drawAll(stepData, exploredUpToNow, finalPath);
+
+                // Update status
+                if (stepData.foundGoal) {
+                    statusText.innerHTML =
+                        `🎯 <span style="color:#20c997;">Jalur ditemukan!</span> — ${stepData.finalPath.length} langkah | Sel dieksplorasi: ${exploredUpToNow.size}`;
+                    statusText.className = 'status-text found';
+                } else {
+                    statusText.innerHTML =
+                        `🔍 Ekspansi sel (${stepData.expandedCell.col}, ${stepData.expandedCell.row}) | Score: <b>${stepData.score.toFixed(1)}</b> | D_goal: ${stepData.D_goal.toFixed(1)} | T: ${stepData.T.toFixed(1)} | Frontier: ${stepData.frontierSnapshot.length} kandidat`;
+                    statusText.className = 'status-text searching';
+                }
+            }
+
+            function advanceStep() {
+                if (!searchResult) return;
+                if (animStepIndex >= searchResult.steps.length - 1) {
+                    // Sudah di step terakhir
+                    if (searchResult.found && animStepIndex === searchResult.steps.length - 1) {
+                        statusText.innerHTML =
+                            `🎯 <span style="color:#20c997;">Jalur ditemukan!</span> — ${searchResult.finalPathCells.length} langkah | Total eksplorasi: ${searchResult.totalExplored} sel`;
+                        statusText.className = 'status-text found';
+                    }
+                    stopAnimation();
+                    updateButtons();
+                    return;
+                }
+                showStep(animStepIndex + 1);
+
+                if (searchResult.steps[animStepIndex].foundGoal) {
+                    stopAnimation();
+                    updateButtons();
+                }
+            }
+
+            function startAutoSearch() {
+                if (isSearching && searchMode === 'auto') return;
+                stopAnimation();
+                resetSearch();
+
+                // Jalankan full search
+                searchResult = runFullSearch();
+                animStepIndex = -1;
+                isSearching = true;
+                searchMode = 'auto';
+                updateButtons();
+
+                if (searchResult.steps.length === 0) {
+                    statusText.innerHTML = '❌ Tidak ada langkah — titik awal = tujuan?';
+                    statusText.className = 'status-text blocked';
+                    stopAnimation();
+                    updateButtons();
+                    return;
+                }
+
+                const delay = Math.max(30, 400 - (animSpeed - 1) * 20);
+
+                function animateNext() {
+                    if (!isSearching || searchMode !== 'auto') return;
+                    advanceStep();
+                    if (animStepIndex >= searchResult.steps.length - 1) {
+                        stopAnimation();
+                        updateButtons();
+                        return;
+                    }
+                    if (searchResult.steps[animStepIndex]?.foundGoal) {
+                        stopAnimation();
+                        updateButtons();
+                        return;
+                    }
+                    animTimerId = setTimeout(animateNext, delay);
+                }
+                animTimerId = setTimeout(animateNext, delay);
+            }
+
+            function startStepSearch() {
+                if (isSearching && searchMode === 'step') return;
+                stopAnimation();
+                resetSearch();
+
+                searchResult = runFullSearch();
+                animStepIndex = -1;
+                isSearching = true;
+                searchMode = 'step';
+                updateButtons();
+
+                if (searchResult.steps.length === 0) {
+                    statusText.innerHTML = '❌ Tidak ada langkah — titik awal = tujuan?';
+                    statusText.className = 'status-text blocked';
+                    stopAnimation();
+                    updateButtons();
+                    return;
+                }
+
+                // Tampilkan step pertama
+                advanceStep();
+                if (searchResult.steps[animStepIndex]?.foundGoal) {
+                    stopAnimation();
+                    updateButtons();
+                }
+            }
+
+            function updateButtons() {
+                const searching = isSearching;
+                btnAutoSearch.disabled = searching;
+                btnStepSearch.disabled = searching;
+                btnReset.disabled = false;
+                btnRandomObs.disabled = searching;
+                btnClearObs.disabled = searching;
+
+                if (searching && searchMode === 'auto') {
+                    btnAutoSearch.textContent = '⏳ Searching...';
+                } else {
+                    btnAutoSearch.textContent = '▶ Auto Search';
+                }
+                if (searching && searchMode === 'step') {
+                    btnStepSearch.textContent = '⏭️ Lanjutkan Step';
+                } else {
+                    btnStepSearch.textContent = '⏭️ Step by Step';
+                }
+            }
+
+            // ==================== EVENT HANDLERS ====================
+            function getEventPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = CANVAS_WIDTH / rect.width;
+                const scaleY = CANVAS_HEIGHT / rect.height;
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            }
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (isSearching) return;
+                const pos = getEventPos(e);
+                const { col, row } = gridFromPixel(pos.x, pos.y);
+                mouseDownPos = { col, row, x: pos.x, y: pos.y };
+
+                // Cek apakah dekat dengan start atau goal
+                const aCenter = cellCenter(startPos.col, startPos.row);
+                const bCenter = cellCenter(goalPos.col, goalPos.row);
+                const distToA = distance2D(pos.x, pos.y, aCenter.x, aCenter.y);
+                const distToB = distance2D(pos.x, pos.y, bCenter.x, bCenter.y);
+                const grabRadius = CELL_SIZE * 0.7;
+
+                if (distToA < grabRadius && distToA < distToB) {
+                    dragMode = 'A';
+                    canvasWrapper.classList.add('dragging-a');
+                    e.preventDefault();
+                    return;
+                }
+                if (distToB < grabRadius && distToB < distToA) {
+                    dragMode = 'B';
+                    canvasWrapper.classList.add('dragging-b');
+                    e.preventDefault();
+                    return;
+                }
+
+                dragMode = null;
+                isDragging = false;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                const pos = getEventPos(e);
+                const { col, row } = gridFromPixel(pos.x, pos.y);
+
+                if (dragMode === 'A') {
+                    if (isValidCell(col, row) && !isObstacle(col, row) && !(col === goalPos.col && row === goalPos
+                            .row)) {
+                        if (col !== startPos.col || row !== startPos.row) {
+                            isDragging = true;
+                            startPos = { col, row };
+                            resetSearch();
+                            drawAll(null, null, null);
+                            updateCollisionStatus();
+                        }
+                    }
+                    canvasWrapper.style.cursor = 'grabbing';
+                    return;
+                }
+                if (dragMode === 'B') {
+                    if (isValidCell(col, row) && !isObstacle(col, row) && !(col === startPos.col && row === startPos
+                            .row)) {
+                        if (col !== goalPos.col || row !== goalPos.row) {
+                            isDragging = true;
+                            goalPos = { col, row };
+                            resetSearch();
+                            drawAll(null, null, null);
+                            updateCollisionStatus();
+                        }
+                    }
+                    canvasWrapper.style.cursor = 'grabbing';
+                    return;
+                }
+
+                // Update cursor untuk hovering
+                if (!isSearching) {
+                    const aCenter = cellCenter(startPos.col, startPos.row);
+                    const bCenter = cellCenter(goalPos.col, goalPos.row);
+                    const distToA = distance2D(pos.x, pos.y, aCenter.x, aCenter.y);
+                    const distToB = distance2D(pos.x, pos.y, bCenter.x, bCenter.y);
+                    const grabRadius = CELL_SIZE * 0.7;
+                    if (distToA < grabRadius || distToB < grabRadius) {
+                        canvasWrapper.style.cursor = 'grab';
+                    } else {
+                        canvasWrapper.style.cursor = 'crosshair';
+                    }
+                }
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (dragMode) {
+                    canvasWrapper.classList.remove('dragging-a', 'dragging-b');
+                    canvasWrapper.style.cursor = 'crosshair';
+                    const mode = dragMode;
+                    dragMode = null;
+                    if (!isDragging && mode && mouseDownPos) {
+                        // Klik singkat tanpa drag signifikan = mungkin toggle obstacle
+                        // Tapi karena ini mode drag, abaikan toggle
+                    }
+                    isDragging = false;
+                    mouseDownPos = null;
+                    return;
+                }
+
+                if (isSearching) return;
+                const pos = getEventPos(e);
+                const { col, row } = gridFromPixel(pos.x, pos.y);
+
+                if (mouseDownPos && mouseDownPos.col === col && mouseDownPos.row === row) {
+                    // Klik pada sel yang sama = toggle obstacle
+                    if (isValidCell(col, row) && !isStartOrGoal(col, row)) {
+                        grid[row][col] = grid[row][col] === 1 ? 0 : 1;
+                        resetSearch();
+                        drawAll(null, null, null);
+                        updateCollisionStatus();
+                    }
+                }
+                mouseDownPos = null;
+                isDragging = false;
+                canvasWrapper.style.cursor = 'crosshair';
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                if (dragMode) {
+                    canvasWrapper.classList.remove('dragging-a', 'dragging-b');
+                    dragMode = null;
+                }
+                mouseDownPos = null;
+                isDragging = false;
+                canvasWrapper.style.cursor = 'crosshair';
+            });
+
+            // Touch events
+            canvas.addEventListener('touchstart', (e) => {
+                if (isSearching) return;
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    const pos = getEventPos(touch);
+                    const { col, row } = gridFromPixel(pos.x, pos.y);
+                    mouseDownPos = { col, row, x: pos.x, y: pos.y };
+
+                    const aCenter = cellCenter(startPos.col, startPos.row);
+                    const bCenter = cellCenter(goalPos.col, goalPos.row);
+                    const distToA = distance2D(pos.x, pos.y, aCenter.x, aCenter.y);
+                    const distToB = distance2D(pos.x, pos.y, bCenter.x, bCenter.y);
+                    const grabRadius = CELL_SIZE * 0.8;
+
+                    if (distToA < grabRadius && distToA < distToB) {
+                        dragMode = 'A';
+                        e.preventDefault();
+                        return;
+                    }
+                    if (distToB < grabRadius && distToB < distToA) {
+                        dragMode = 'B';
+                        e.preventDefault();
+                        return;
+                    }
+                    dragMode = null;
+                    isDragging = false;
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (!dragMode) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const pos = getEventPos(touch);
+                const { col, row } = gridFromPixel(pos.x, pos.y);
+
+                if (dragMode === 'A' && isValidCell(col, row) && !isObstacle(col, row) && !(col === goalPos.col &&
+                        row === goalPos.row)) {
+                    if (col !== startPos.col || row !== startPos.row) {
+                        isDragging = true;
+                        startPos = { col, row };
+                        resetSearch();
+                        drawAll(null, null, null);
+                        updateCollisionStatus();
+                    }
+                }
+                if (dragMode === 'B' && isValidCell(col, row) && !isObstacle(col, row) && !(col === startPos.col &&
+                        row === startPos.row)) {
+                    if (col !== goalPos.col || row !== goalPos.row) {
+                        isDragging = true;
+                        goalPos = { col, row };
+                        resetSearch();
+                        drawAll(null, null, null);
+                        updateCollisionStatus();
+                    }
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                if (dragMode && !isDragging && mouseDownPos) {
+                    const { col, row } = mouseDownPos;
+                    if (isValidCell(col, row) && !isStartOrGoal(col, row)) {
+                        grid[row][col] = grid[row][col] === 1 ? 0 : 1;
+                        resetSearch();
+                        drawAll(null, null, null);
+                        updateCollisionStatus();
+                    }
+                }
+                dragMode = null;
+                isDragging = false;
+                mouseDownPos = null;
+            });
+
+            function updateCollisionStatus() {
+                const collisionCells = getCollisionCells();
+                if (collisionCells.length > 0) {
+                    statusText.innerHTML =
+                        `⚠️ <span style="color:#fa5252;">${collisionCells.length} sel tabrakan</span> — garis lurus terhalang. Klik <b>Auto Search</b> untuk mencari jalur alternatif.`;
+                    statusText.className = 'status-text blocked';
+                } else {
+                    statusText.innerHTML =
+                    '✅ Garis lurus bebas rintangan. Klik <b>Auto Search</b> atau <b>Step by Step</b> untuk memulai.';
+                    statusText.className = 'status-text';
+                }
+            }
+
+            // ==================== BUTTON HANDLERS ====================
+            btnAutoSearch.addEventListener('click', () => {
+                if (isSearching) return;
+                startAutoSearch();
+            });
+
+            btnStepSearch.addEventListener('click', () => {
+                if (isSearching && searchMode === 'step') {
+                    // Lanjutkan step
+                    advanceStep();
+                    if (searchResult && animStepIndex >= searchResult.steps.length - 1) {
+                        stopAnimation();
+                        updateButtons();
+                    }
+                    if (searchResult && searchResult.steps[animStepIndex]?.foundGoal) {
+                        stopAnimation();
+                        updateButtons();
+                    }
+                    return;
+                }
+                if (isSearching) return;
+                startStepSearch();
+                // Update tombol untuk menunjukkan bisa lanjut
+                btnStepSearch.textContent = '⏭️ Lanjutkan Step';
+            });
+
+            btnReset.addEventListener('click', () => {
+                resetSearch();
+                updateButtons();
+                updateCollisionStatus();
+            });
+
+            btnRandomObs.addEventListener('click', () => {
+                if (isSearching) return;
+                initGrid();
+                // Buat rintangan acak (~25% dari grid)
+                const totalCells = COLS * ROWS;
+                const targetObs = Math.floor(totalCells * 0.22);
+                let placed = 0;
+                const maxAttempts = targetObs * 5;
+                let attempts = 0;
+                while (placed < targetObs && attempts < maxAttempts) {
+                    const c = Math.floor(Math.random() * COLS);
+                    const r = Math.floor(Math.random() * ROWS);
+                    if (!isStartOrGoal(c, r) && grid[r][c] === 0) {
+                        // Buat beberapa kluster
+                        grid[r][c] = 1;
+                        placed++;
+                        // Kadang tambahkan tetangga untuk kluster
+                        if (Math.random() < 0.4) {
+                            const dirs = [{ dc: 1, dr: 0 }, { dc: 0, dr: 1 }, { dc: -1, dr: 0 }, { dc: 0, dr: -1 },
+                                { dc: 1, dr: 1 }, { dc: -1, dr: 1 }
+                            ];
+                            const dir = dirs[Math.floor(Math.random() * dirs.length)];
+                            const nc = c + dir.dc;
+                            const nr = r + dir.dr;
+                            if (isValidCell(nc, nr) && !isStartOrGoal(nc, nr) && grid[nr][nc] === 0 && placed <
+                                targetObs) {
+                                grid[nr][nc] = 1;
+                                placed++;
+                            }
+                        }
+                    }
+                    attempts++;
+                }
+                // Pastikan start dan goal tidak terhalang total
+                ensureStartGoalAccessible();
+                resetSearch();
+                drawAll(null, null, null);
+                updateCollisionStatus();
+            });
+
+            btnClearObs.addEventListener('click', () => {
+                if (isSearching) return;
+                initGrid();
+                resetSearch();
+                drawAll(null, null, null);
+                updateCollisionStatus();
+            });
+
+            function ensureStartGoalAccessible() {
+                // Pastikan tetangga langsung start & goal setidaknya ada yang kosong
+                for (const pos of [startPos, goalPos]) {
+                    const neighbors = getNeighborsRaw(pos.col, pos.row);
+                    const allBlocked = neighbors.every(n => isObstacle(n.col, n.row));
+                    if (allBlocked && neighbors.length > 0) {
+                        // Buka satu tetangga acak
+                        const n = neighbors[Math.floor(Math.random() * neighbors.length)];
+                        if (isValidCell(n.col, n.row) && !isStartOrGoal(n.col, n.row)) {
+                            grid[n.row][n.col] = 0;
+                        }
+                    }
+                }
+            }
+
+            function getNeighborsRaw(col, row) {
+                const dirs = [
+                    { dc: -1, dr: -1 }, { dc: 0, dr: -1 }, { dc: 1, dr: -1 },
+                    { dc: -1, dr: 0 }, { dc: 1, dr: 0 },
+                    { dc: -1, dr: 1 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }
+                ];
+                const result = [];
+                for (const d of dirs) {
+                    const nc = col + d.dc;
+                    const nr = row + d.dr;
+                    if (isValidCell(nc, nr)) result.push({ col: nc, row: nr });
+                }
+                return result;
+            }
+
+            // ==================== SLIDER HANDLERS ====================
+            kSlider.addEventListener('input', () => {
+                kValue = parseFloat(kSlider.value);
+                kValueEl.textContent = kValue.toFixed(1);
+                if (searchResult) {
+                    // Re-run search dengan k baru
+                    stopAnimation();
+                    const oldResult = searchResult;
+                    searchResult = runFullSearch();
+                    if (searchMode === 'step') {
+                        animStepIndex = Math.min(animStepIndex, searchResult.steps.length - 1);
+                        if (animStepIndex >= 0 && animStepIndex < searchResult.steps.length) {
+                            showStep(animStepIndex);
+                        } else {
+                            drawAll(null, null, null);
+                            updateCollisionStatus();
+                        }
+                    } else {
+                        resetSearch();
+                        drawAll(null, null, null);
+                        updateCollisionStatus();
+                    }
+                    searchMode = null;
+                    isSearching = false;
+                    updateButtons();
+                } else {
+                    resetSearch();
+                    drawAll(null, null, null);
+                    updateCollisionStatus();
+                }
+            });
+
+            speedSlider.addEventListener('input', () => {
+                animSpeed = parseInt(speedSlider.value);
+                speedValueEl.textContent = animSpeed;
+                // Jika sedang auto-search, restart dengan speed baru
+                if (isSearching && searchMode === 'auto') {
+                    stopAnimation();
+                    const currentStep = animStepIndex;
+                    searchResult = runFullSearch();
+                    animStepIndex = -1;
+                    isSearching = true;
+                    searchMode = 'auto';
+                    updateButtons();
+                    const delay = Math.max(30, 400 - (animSpeed - 1) * 20);
+
+                    function animateNext() {
+                        if (!isSearching || searchMode !== 'auto') return;
+                        advanceStep();
+                        if (animStepIndex >= searchResult.steps.length - 1) {
+                            stopAnimation();
+                            updateButtons();
+                            return;
+                        }
+                        if (searchResult.steps[animStepIndex]?.foundGoal) {
+                            stopAnimation();
+                            updateButtons();
+                            return;
+                        }
+                        animTimerId = setTimeout(animateNext, delay);
+                    }
+                    animTimerId = setTimeout(animateNext, delay);
+                }
+            });
+
+            // ==================== KEYBOARD SHORTCUTS ====================
+            document.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.code === 'Space') {
+                    e.preventDefault();
+                    if (!isSearching) {
+                        startAutoSearch();
+                    }
+                } else if (e.key === 's' || e.key === 'S') {
+                    if (!isSearching) {
+                        startStepSearch();
+                    } else if (searchMode === 'step') {
+                        advanceStep();
+                        if (searchResult && animStepIndex >= searchResult.steps.length - 1) {
+                            stopAnimation();
+                            updateButtons();
+                        }
+                        if (searchResult && searchResult.steps[animStepIndex]?.foundGoal) {
+                            stopAnimation();
+                            updateButtons();
+                        }
+                    }
+                } else if (e.key === 'r' || e.key === 'R') {
+                    resetSearch();
+                    updateButtons();
+                    updateCollisionStatus();
+                }
+            });
+
+            // ==================== INISIALISASI ====================
+            function init() {
+                initGrid();
+                // Tambahkan beberapa rintangan default untuk demonstrasi
+                const defaultObstacles = [
+                    // Dinding vertikal di tengah dengan celah
+                    { col: 10, row: 2 }, { col: 10, row: 3 }, { col: 10, row: 4 }, { col: 10, row: 5 },
+                    { col: 10, row: 6 }, { col: 10, row: 8 }, { col: 10, row: 9 }, { col: 10, row: 10 },
+                    { col: 10, row: 11 }, { col: 10, row: 12 },
+                    // Beberapa rintangan tambahan
+                    { col: 7, row: 10 }, { col: 8, row: 10 }, { col: 9, row: 10 },
+                    { col: 12, row: 4 }, { col: 13, row: 4 }, { col: 13, row: 5 },
+                ];
+                for (const obs of defaultObstacles) {
+                    if (isValidCell(obs.col, obs.row) && !isStartOrGoal(obs.col, obs.row)) {
+                        grid[obs.row][obs.col] = 1;
+                    }
+                }
+
+                kValue = parseFloat(kSlider.value);
+                kValueEl.textContent = kValue.toFixed(1);
+                animSpeed = parseInt(speedSlider.value);
+                speedValueEl.textContent = animSpeed;
+
+                resetSearch();
+                updateButtons();
+                drawAll(null, null, null);
+                updateCollisionStatus();
+            }
+
+            init();
+
+            console.log('✅ Visualisasi Priority-Based Search siap!');
+            console.log('   Rumus: Score = D_goal + k × T');
+            console.log('   🖱️  Klik grid → toggle rintangan');
+            console.log('   🖱️  Geser titik A (hijau) atau B (merah)');
+            console.log('   ⌨️  Spasi → Auto Search | S → Step | R → Reset');
+            console.log('   📐  k =', kValue, '| Kecepatan =', animSpeed);
+        })();
+    </script>
+</body>
+</html>
