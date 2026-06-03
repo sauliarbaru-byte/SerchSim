@@ -543,7 +543,6 @@ function initAlgorithm() {
       break;
     case 'greedy':
       algoState.pq = [{ r: s.r, c: s.c, h: heuristic(s, g) }];
-      algoState.visited.add(key(s.r, s.c));
       break;
     case 'astar':
     case 'weighted_astar':
@@ -603,7 +602,6 @@ function initAlgorithm() {
       break;
     case 'backtracking':
       algoState.stack = [{ r: s.r, c: s.c }];
-      algoState.visited.add(key(s.r, s.c));
       break;
     case 'ants':
       algoState.pheromone = {};
@@ -3025,7 +3023,6 @@ function _initCmpAlgo(algo, s, g) {
       break;
     case 'backtracking':
       as.stack = [{ r: s.r, c: s.c }];
-      as.vis.add(key(s.r, s.c));
       break;
     case 'ants':
       as.pheromone = new Map();
